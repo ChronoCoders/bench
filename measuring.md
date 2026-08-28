@@ -756,6 +756,36 @@ The constant is gone. The plan measures the spectrum before and after its own cu
 
 **A number measured on three files and written into the code is a quoted figure**, however carefully it was measured. It has the same standing as a figure quoted from memory: it describes the files it came from. The standing warning above says no target range is seeded from a quoted figure, and this was the same thing one layer down.
 
+### 33. Three mutants nothing noticed, and no two answers the same
+
+Sixteen mutations were written for the mastering layer, one for each fault already in this file. Three of them survived, and entry 24 says a surviving mutant is a question rather than a verdict. These three had three different answers, and none of them was the answer entry 24 or entry 25 gave.
+
+**The first was a missing control, plainly.** The mutation puts back the call that entry 29 is about: measuring the low cut signal with `loudness.measure` on an `Audio` whose samples have been replaced, so one instrument reads the filtered samples and the other reads the original file. Nothing failed.
+
+I had found that fault by hand, fixed it, and written no test for it. Every other fault in entry 26 got a control while I was writing controls. This one got fixed while I was reading output, and fixing it felt like finishing.
+
+That is the shape worth naming. **A fault found by hand is the one most likely to end up with no control**, because the evidence that convinced you was a number in front of you rather than a test, and once the number moves the work feels done. The controls written deliberately all had controls. The one found by accident did not.
+
+The control now compares the peak the gain was actually derived from against a direct measurement of the filtered signal, on a file with enough under 20 Hz that the filtered and unfiltered peaks differ by far more than the check allows. Its negative control is that difference: if the cut moved the peak by less than the tolerance, the check could not tell which signal had been measured.
+
+**The second was a test that asserted the direction and not the value.** The mutation makes the gain aim at the bottom of the target range whatever the file measures, which is what entry 30 is about. The test written for entry 30 asserted that a file above its range gets a negative gain and a file below it gets a positive one.
+
+Aiming at the bottom of the range also gives a file above the range a negative gain. It gives it a much larger one, all the way across the range instead of just inside the near edge, and the sign is the same either way. The test passed on both behaviours, which means it was never testing the thing entry 30 named.
+
+**A test that asserts the direction of a correction says nothing about where it is aimed.** The assertion is now the value, to 0.002 dB, against the near edge computed from the target and the measurement's own uncertainty. The sign check stays as a second, weaker test, which is fine as long as it is not the only one.
+
+**The third was a test that passed because a different check refused.** The mutation removes the first line of `refuse_unsafe`, which is the one that stops the output folder being the folder the source is in. Two tests cover that line and neither failed.
+
+They could not. With that check gone, the destination becomes the source itself, the source exists, and the next check refuses because the destination already exists. The call still raises, the tests still see the exception they asked for, and the message still contains the folder path because it contains the whole destination path. Every assertion held while the safeguard they were written for was gone.
+
+This one matters more than the other two, because the check it covers is the one that stops the tool writing over somebody's master. It was the only mutant of the sixteen that could have destroyed a file, and it was the one the suite was blindest to.
+
+**A test that asserts only that something was refused cannot tell you which check refused it.** Both tests now assert the reason. The folder refusal has to name the folder as the problem, the existing file refusal has to name the file, and each asserts the other's words are absent. That last part is what makes them distinguishable rather than merely worded differently.
+
+There is a second lesson underneath. Two safeguards that overlap look like defence in depth and behave like one safeguard with a spare. Entry 26 records deleting a third branch of this same function because it could not be reached. What this mutant shows is that unreachable was the wrong word: the branch was reachable, the check above it just got there first, and the same is true in the other direction. Overlap is not redundancy unless the tests can tell which one is holding.
+
+All three passed a green suite, and all three were written the same day as the code they cover.
+
 ## Standing warning: where target numbers come from
 
 Measurements taken before 2026-08-26 in other sessions were mostly made with
@@ -922,6 +952,14 @@ put full scale at 1.0 whatever the bit depth             1 test
 correlate the channels without removing their means      1 test
 delete the duration cross check                          1 test
 ```
+
+That table is the exhaustive run, which puts every mutant through the whole suite.
+The twenty mutations it lists were the engine as it stood then. The mastering
+layer added sixteen more on 2026-08-28, checked in stop early mode, where a
+mutant runs only until the first test that catches it. That answers whether a
+break is noticed and not how many tests notice it, so they are not in the table.
+Two of them survived the first pass and entry 33 is what each one turned out to
+mean.
 
 The counts at the top are inflated and should not be read as reassurance. Almost
 every test decodes a file, so anything that breaks decoding breaks most of the
