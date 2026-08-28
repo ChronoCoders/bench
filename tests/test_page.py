@@ -4,7 +4,7 @@ import re
 
 import music
 import signals as sig
-from bench import compare, fields, folder, measurement, page
+from bench import compare, fields, folder, measurement, page, report
 
 CEILING = {"max": -1.0, "declared_by": "test"}
 
@@ -118,3 +118,104 @@ def test_the_alternatives_check_can_fail(tmp_path):
     assert page.octaves(one) == "", (
         "the block would claim to show alternatives when there are none"
     )
+
+
+# The before and after views. Neither decides anything, so what these check is that
+# every placed field survives the trip and that the colour rule is the same one the
+# folder table uses: only what is outside is marked.
+
+def mastered_result(after_verdicts, before_verdicts=(compare.BELOW, compare.INSIDE)):
+    """A result shaped like master.run's, with the verdicts named rather than measured."""
+    rows_before = [
+        {"field": "loudness.integrated_lufs", "value": -14.8, "uncertainty": 0.005,
+         "bound": {"low": -12.0, "high": -6.0}, "deviation": -2.8},
+        {"field": "loudness.true_peak_dbtp", "value": -4.5, "uncertainty": 0.05,
+         "bound": {"max": -1.0}, "deviation": 0.0},
+    ]
+    rows_before = [dict(row, verdict=verdict)
+                   for row, verdict in zip(rows_before, before_verdicts)]
+    rows_after = [dict(row, verdict=verdict) for row, verdict in zip(rows_before, after_verdicts)]
+    rows_after[0]["value"], rows_after[1]["value"] = -10.5, -1.2
+    graded = {"target": {"name": "test", "band_set": "bench-v1"},
+              "rows": rows_after, "counts": {}, "all_inside": True}
+    return {
+        "method": "master/gain-cut-and-searched-limiter",
+        "input": r"C:\in\one.wav", "output": r"C:\out\one.wav",
+        "plan": {"method": "master/gain-cut-and-searched-limiter", "not_applied": [
+                     {"correction": "low cut", "why": "there is nothing there to remove"}],
+                 "steps": [{"correction": "gain", "db": 4.3, "bound_by": "the target loudness",
+                            "from": "toward -12.0, the bottom of the range, plus 0.06"}]},
+        "limiter_search": None,
+        "before": {"measurement": {}, "comparison": {"target": {"name": "test"},
+                                                     "rows": rows_before, "counts": {},
+                                                     "all_inside": False}},
+        "after": {"measurement": {}, "comparison": graded},
+        "prediction": {"checked": True, "against": "the second instrument", "held": True,
+                       "fields": {"integrated_lufs": {"predicted": -10.5, "measured": -10.5,
+                                                      "gap": 0.0, "uncertainty": 0.005,
+                                                      "held": True}}},
+        "reached": {"arrived": True, "fields": {
+            "loudness.integrated_lufs": {"value": -10.5, "uncertainty": 0.005,
+                                         "verdict": compare.INSIDE, "deviation": 0.0},
+            "loudness.true_peak_dbtp": {"value": -1.2, "uncertainty": 0.05,
+                                        "verdict": compare.INSIDE, "deviation": 0.0}}},
+    }
+
+
+def test_a_run_that_was_inside_all_along_carries_no_colour():
+    html = page.master_view(mastered_result([compare.INSIDE, compare.INSIDE],
+                                            [compare.INSIDE, compare.INSIDE]))
+    marked = re.findall(r'class="(line|out)">', html)
+    assert marked == [], "nothing was outside at either end, so nothing should be marked"
+
+
+def test_only_the_side_that_was_outside_is_marked():
+    """One field below before and inside after. Two cells carry the value and the
+    verdict, so the before side is marked twice and the after side not at all."""
+    html = page.master_view(mastered_result([compare.INSIDE, compare.INSIDE]))
+    marked = re.findall(r'class="(line|out)">', html)
+    assert marked == ["out", "out"], marked
+
+
+def test_it_marks_a_field_that_landed_outside():
+    """The control on the one above. A view that never marks the after side is not a
+    view that marks what is outside."""
+    html = page.master_view(mastered_result([compare.BELOW, compare.ON_THE_LINE]))
+    marked = re.findall(r'class="(line|out)">', html)
+    assert marked.count("out") == 4 and marked.count("line") == 2, marked
+
+
+def test_the_before_column_keeps_the_verdict_the_file_started_with():
+    html = page.master_view(mastered_result([compare.INSIDE, compare.INSIDE]))
+    assert ">below<" in html, "the before column has to still say the file was below"
+
+
+def test_the_view_says_whether_it_arrived():
+    result = mastered_result([compare.INSIDE, compare.INSIDE])
+    assert "It arrived." in page.master_view(result)
+    result["reached"]["arrived"] = False
+    assert "It did not arrive." in page.master_view(result)
+
+
+def test_the_view_names_what_was_refused_and_why():
+    html = page.master_view(mastered_result([compare.INSIDE, compare.INSIDE]))
+    assert "not applied" in html
+    assert "There is nothing there to remove" in html, "the reason should start a sentence"
+
+
+def test_the_text_report_places_every_field_the_page_does():
+    result = mastered_result([compare.INSIDE, compare.INSIDE])
+    text = report.master_table(result)
+    for field in ("Integrated loudness", "True peak"):
+        assert field in text
+    assert "Arrived: yes" in text
+    assert "-14.8" in text and "-10.5" in text
+
+
+def test_the_text_report_says_when_it_did_not_arrive():
+    result = mastered_result([compare.BELOW, compare.INSIDE])
+    result["reached"]["arrived"] = False
+    result["reached"]["fields"]["loudness.integrated_lufs"]["deviation"] = -1.5
+    text = report.master_table(result)
+    assert "Arrived: no" in text
+    assert "off by -1.5" in text

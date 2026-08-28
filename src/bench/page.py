@@ -5,6 +5,7 @@ No request leaves the page. Fonts are the ones already on the machine.
 
 from __future__ import annotations
 
+import os
 from html import escape
 from pathlib import Path
 
@@ -270,7 +271,7 @@ def folder_view(sheet: dict) -> str:
                      f"{escape(sentence(skip['why']))}</li>")
 
     where = Path(sheet["folder"])
-    heading = (f"{escape(str(where.parent))}\<b>{escape(where.name)}</b>"
+    heading = (f"{escape(str(where.parent) + os.sep)}<b>{escape(where.name)}</b>"
                if where.name else escape(str(where)))
     return (
         f"<div class=\"head\"><h1>{heading}</h1>"
@@ -436,3 +437,94 @@ def file_view(measurement: dict, result: dict | None, target: dict | None) -> st
     if result is not None:
         body += comparison_view(result)
     return body
+
+
+def _master_row(field: str, was: dict, now: dict) -> str:
+    decimals = fields.BY_PATH.get(field).decimals if field in fields.BY_PATH else 3
+    cells = []
+    for row in (was, now):
+        klass = VERDICT_CLASS.get(row.get("verdict"), "gap") if row else "gap"
+        cells.append(f"<td class=\"{klass}\">{number(row.get('value'), decimals)}</td>"
+                     f"<td class=\"{klass}\">{escape(row.get('verdict', ''))}</td>")
+    return (f"<tr><td class=\"name\">{escape(fields.name_of(field))}</td>"
+            + "".join(cells) +
+            f"<td class=\"blank\">{escape(_bound_text(now['bound']) if now.get('bound') else '')}"
+            "</td></tr>")
+
+
+def _plan_items(plan: dict) -> str:
+    items = []
+    for one in plan["steps"]:
+        if one["correction"] == "low cut":
+            said = f"At {one['hz']:.0f} Hz, order {one['order']}. {sentence(one['from'])}."
+            if "moved_bands_by_pct" in one:
+                said += (f" Moved the bands above it by at most "
+                         f"{one['moved_bands_by_pct']} points.")
+        elif one["correction"] == "gain":
+            said = f"{one['db']:+.3f} dB, set by {one['bound_by']}. Aimed {one['from']}."
+            if "corrected_by_db" in one:
+                said += (f" Of that, {one['corrected_by_db']:+.3f} dB is a correction: "
+                         f"{one['correction_from']}.")
+        else:
+            worked = one["gain_reduction"]
+            said = (f"To {one['ceiling_dbtp']} dBTP, attack {one['attack_ms']} ms, release "
+                    f"{one['release_ms']} ms. {sentence(one['chosen_from'])}. Took at most "
+                    f"{worked['largest_db']} dB off, and moved the widest band by "
+                    f"{one['largest_band_move_pct']} points.")
+            if one.get("at_search_edge"):
+                said += f" {sentence(one['at_search_edge'])}."
+            if "why_it_stopped" in one:
+                said += f" {one['why_it_stopped']}"
+        items.append(f"<li><b>{escape(one['correction'].capitalize())}</b> {escape(said)}</li>")
+    for one in plan["not_applied"]:
+        items.append(f"<li><b>{escape(one['correction'].capitalize())}</b> not applied. "
+                     f"{escape(sentence(one['why']))}.</li>")
+    return f"<ul class=\"reasons\">{''.join(items)}</ul>"
+
+
+def master_view(result: dict) -> str:
+    """Before and after against the same target, coloured by the same rule as the
+    folder table: only what is outside is marked."""
+    before = {r["field"]: r for r in result["before"]["comparison"]["rows"]}
+    rows = []
+    for row in result["after"]["comparison"]["rows"]:
+        if row["verdict"] == compare.NO_TARGET or row.get("advisory"):
+            continue
+        rows.append(_master_row(row["field"], before.get(row["field"], {}), row))
+
+    landed = result["reached"]
+    where = []
+    for field, one in landed["fields"].items():
+        if "value" not in one:
+            where.append(f"{fields.name_of(field)} was not measured on the output")
+            continue
+        where.append(f"{fields.name_of(field)} landed at {one['value']} plus or minus "
+                     f"{one['uncertainty']}, {one['verdict']}")
+    arrived = (f"<p>{escape('; '.join(where))}. "
+               + ("It arrived." if landed["arrived"] else "It did not arrive.") + "</p>")
+
+    held = result["prediction"]
+    checked = ""
+    if held.get("checked"):
+        parts = []
+        for name, one in held["fields"].items():
+            if "predicted" not in one:
+                continue
+            parts.append(f"{fields.name_of('loudness.' + name)} was predicted "
+                         f"{one['predicted']} and measured {one['measured']}, apart by "
+                         f"{one['gap']} against {one['uncertainty']} allowed")
+        checked = (f"<p>Checked against {escape(held['against'])} instrument: "
+                   + escape("; ".join(parts)) + ". "
+                   + ("Every prediction held." if held.get("held")
+                      else "Not every prediction held.") + "</p>")
+
+    return (
+        f"<h2>Mastered against {escape(result['after']['comparison']['target']['name'])}</h2>"
+        f"<p>Read {escape(result['input'])}<br>Written {escape(result['output'])}</p>"
+        + key() +
+        "<div class=\"wrap\"><table><thead><tr><th>Field</th><th>Before</th><th>Was</th>"
+        "<th>After</th><th>Now</th><th>Target</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+        f"<h2>What it did</h2>{_plan_items(result['plan'])}"
+        + arrived + checked
+    )
