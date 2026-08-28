@@ -84,7 +84,9 @@ def test_a_short_file_leaves_gaps_rather_than_numbers(tmp_path):
     sheet = folder.measure(out)
     assert sheet["files"][0]["values"][BPM] is None
     assert sheet["measurements"]["a.wav"]["tempo"]["unmeasurable"]
-    row = [ln for ln in report.folder_table(sheet).splitlines() if ln.startswith("a.wav")][0]
+    label = sheet["files"][0]["label"]
+    assert label == "a", "the extension should be off the track name"
+    row = [ln for ln in report.folder_table(sheet).splitlines() if ln.startswith(label)][0]
     assert "None" not in row and "nan" not in row
 
 

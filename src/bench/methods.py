@@ -387,7 +387,10 @@ _METHODS = (
             "tick has an onset and every onset is on a tick. On 35 controls with known answers "
             "this rule returns the double 8 times, every one of them between 72 and 88 BPM on "
             "subdivided material. The alternatives are reported with their occupancy and "
-            "coverage so the choice is visible rather than hidden.",
+            "coverage so the choice is visible rather than hidden. The margin between the "
+            "top two candidates does not say which is right: across the same 35 controls "
+            "the correct answer has been reached on a 0.6 percent margin and the wrong one "
+            "on 29.0 percent, so no threshold on it is shipped.",
             "A grid fit is measured only over onsets within 30 ms of a tick, so it is the median "
             "of a truncated distribution and cannot exceed about 15 ms however loose the timing "
             "is. Measured on a click track it reads 4.07, 9.09, 11.18 and 15.52 ms for scatter "

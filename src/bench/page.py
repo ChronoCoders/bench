@@ -6,21 +6,22 @@ No request leaves the page. Fonts are the ones already on the machine.
 from __future__ import annotations
 
 from html import escape
+from pathlib import Path
 
 from bench import compare, fields, typeface
 
 STYLE = """
 :root {
-  --bg: #08090c; --panel: #14161c; --panel-hi: #1b1e26;
-  --edge: #2a2f3a; --edge-hi: #3a4150;
-  --text: #c7ccd6; --dim: #6b7280; --faint: #454b57;
-  --accent: #34e7de; --play: #3ee87a; --cue: #ffb020; --kill: #ff4d5e;
+  --bg: #08090b; --panel: #0d0f13; --panel-hi: #12151a;
+  --edge: #1a1d23; --edge-soft: #141720; --edge-hi: #2a2f3a;
+  --text: #efe9de; --dim: #5f6672; --faint: #3d434d; --unclaimed: #6a7280;
+  --accent: #34e7de; --cue: #ffb020; --kill: #ff4d5e;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   min-height: 100%;
-  background: radial-gradient(1200px 700px at 50% -10%, #12151b 0%, var(--bg) 60%) fixed;
+  background: var(--bg);
   color: var(--text);
   font-family: 'Chakra Petch', system-ui, sans-serif;
   font-size: 14px; line-height: 1.5;
@@ -44,9 +45,16 @@ button { min-width: 0; cursor: pointer; border-color: var(--edge-hi); letter-spa
          text-transform: uppercase; font-size: 11px; padding: 9px 16px; }
 button:hover { border-color: var(--accent); color: var(--accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { overflow-x: auto; overflow-y: hidden; }
 table { border-collapse: collapse; width: 100%; }
-th, td { padding: 7px 16px; border-bottom: 1px solid var(--edge); white-space: nowrap; }
-th:first-child, td:first-child { width: 1%; padding-left: 0; }
+th, td { padding: 8px 0 8px 18px; border-bottom: 1px solid var(--edge-soft);
+         white-space: nowrap; }
+th:first-child, td:first-child { width: 1%; padding-left: 0; padding-right: 26px; }
+th.grp, td.grp { padding-left: 34px; position: relative; }
+th.grp::before, td.grp::before { content: ""; position: absolute; left: 16px;
+  top: -1px; bottom: -1px; border-left: 1px solid var(--edge-soft); }
+th.grp::before { top: auto; height: 11px; bottom: 9px; }
+th.quiet { color: var(--faint); }
 th { text-align: right; font-size: 10px; font-weight: 600; color: var(--dim);
      text-transform: uppercase; letter-spacing: 0.09em; }
 th:first-child, td:first-child { text-align: left; }
@@ -66,6 +74,7 @@ tr.spread td:hover, tr.over td:hover { background: none; }
 .line { color: var(--cue); background: rgba(255, 176, 32, 0.12);
         box-shadow: inset 0 -2px 0 var(--cue); }
 .out { color: var(--kill); }
+.none { color: var(--unclaimed); }
 .gap { color: var(--faint); }
 .note { font-size: 12px; color: var(--dim); margin-top: 8px; }
 .reasons { margin-top: 12px; list-style: none; }
@@ -106,6 +115,11 @@ def document(title: str, body: str) -> str:
         f"<style>{typeface.css()}</style><style>{STYLE}</style></head>"
         f"<body><main>{body}</main></body></html>\n"
     )
+
+
+def sentence(text: str) -> str:
+    """A reason written to follow a colon, made to follow a full stop."""
+    return text[:1].upper() + text[1:] if text else text
 
 
 def number(value, decimals: int) -> str:
@@ -173,7 +187,11 @@ def spectrum(measurement: dict, target: dict | None) -> str:
     )
 
 
-KEY = (("var(--kill)", "outside the target"), ("var(--cue)", "on the line"))
+KEY = (
+    ("var(--kill)", "outside the target"),
+    ("var(--cue)", "on the line"),
+    ("var(--unclaimed)", "no verdict claimed"),
+)
 
 
 def key() -> str:
@@ -183,32 +201,64 @@ def key() -> str:
             "<span class=\"unmarked\">unmarked is inside the target</span></div>")
 
 
+def _why_no_verdict(sheet: dict, path: str) -> str:
+    """The target's own words for why it claims nothing here."""
+    for result in sheet.get("comparisons", {}).values():
+        for row in result["rows"]:
+            if row["field"] == path and row.get("why"):
+                return row["why"]
+    return "this target sets no bound for it."
+
+
 def folder_view(sheet: dict) -> str:
     columns = sheet["columns"]
-    head = "".join(f"<th>{escape(c['label'])}</th>" for c in columns)
+    graded = any(row.get("verdicts") for row in sheet["files"])
+    claimed = {c["path"] for c in columns
+               if any(c["path"] in row.get("verdicts", {}) for row in sheet["files"])}
+
+    def group(c, extra=""):
+        classes = [k for k in ("grp" if c["starts_group"] else "", extra) if k]
+        return f' class="{" ".join(classes)}"' if classes else ""
+
+    head = "".join(
+        f"<th{group(c, 'quiet' if graded and c['path'] not in claimed else '')}>"
+        f"{escape(c['label'])}</th>" for c in columns)
+
     rows = []
     for row in sheet["files"]:
         verdicts = row.get("verdicts", {})
         cells = []
         for c in columns:
-            klass = VERDICT_CLASS.get(verdicts.get(c["path"]), "")
-            mark = f' class="{klass}"' if klass else ""
-            cells.append(f"<td{mark}>{number(row['values'][c['path']], c['decimals'])}</td>")
-        rows.append(f"<tr><td class=\"name\">{escape(row['name'])}</td>{''.join(cells)}</tr>")
+            if not graded:
+                klass = ""
+            elif c["path"] in verdicts:
+                klass = VERDICT_CLASS.get(verdicts[c["path"]], "")
+            else:
+                klass = "none"
+            cells.append(f"<td{group(c, klass)}>"
+                         f"{number(row['values'][c['path']], c['decimals'])}</td>")
+        rows.append(f"<tr><td class=\"name\">{escape(row.get('label', row['name']))}</td>"
+                    f"{''.join(cells)}</tr>")
 
     spread, over = [], []
     for c in columns:
         found = sheet["spread"][c["path"]]
-        spread.append("<td>" + ("<span class=\"blank\">.</span>" if "withheld" in found
-                                else number(found.get("spread"), c["decimals"])) + "</td>")
-        over.append("<td>" + ("" if found["n"] == 0 else str(found["n"])) + "</td>")
+        spread.append(f"<td{group(c)}>" + ("<span class=\"blank\">.</span>"
+                      if "withheld" in found
+                      else number(found.get("spread"), c["decimals"])) + "</td>")
+        over.append(f"<td{group(c)}>" + ("" if found["n"] == 0 else str(found["n"])) + "</td>")
 
     notes = []
+    for c in columns:
+        if graded and c["path"] not in claimed:
+            why = _why_no_verdict(sheet, c["path"])
+            notes.append(f"<li><b>{escape(c['name'])}</b> carries no verdict. "
+                         f"{escape(sentence(why))}</li>")
     for c in columns:
         found = sheet["spread"][c["path"]]
         if "withheld" in found:
             notes.append(f"<li><b>{escape(c['label'])}</b> has no spread. "
-                         f"{escape(found['withheld'])}.</li>")
+                         f"{escape(sentence(found['withheld']))}.</li>")
     partial = [c["label"] for c in columns if "withheld" not in sheet["spread"][c["path"]]
                and 0 < sheet["spread"][c["path"]]["n"] < len(sheet["files"])]
     if partial:
@@ -217,17 +267,20 @@ def folder_view(sheet: dict) -> str:
                      "says how many.</li>")
     for skip in sheet["skipped"]:
         notes.append(f"<li><b>{escape(skip['name'])}</b> could not be read. "
-                     f"{escape(skip['why'])}</li>")
+                     f"{escape(sentence(skip['why']))}</li>")
 
-    graded = any(row.get("verdicts") for row in sheet["files"])
+    where = Path(sheet["folder"])
+    heading = (f"{escape(str(where.parent))}\<b>{escape(where.name)}</b>"
+               if where.name else escape(str(where)))
     return (
-        f"<div class=\"head\"><h1>{escape(sheet['folder'])}</h1>"
+        f"<div class=\"head\"><h1>{heading}</h1>"
         f"<span class=\"meta\">{len(sheet['files'])} files</span></div>"
         + (key() if graded else "")
+        + "<div class=\"wrap\">"
         + f"<table><thead><tr><th>Track</th>{head}</tr></thead><tbody>{''.join(rows)}</tbody>"
         + f"<tfoot><tr class=\"pause\"><td colspan=\"{len(columns) + 1}\"></td></tr>"
         f"<tr class=\"spread\"><td>Spread</td>{''.join(spread)}</tr>"
-        f"<tr class=\"over\"><td>Over</td>{''.join(over)}</tr></tfoot></table>"
+        f"<tr class=\"over\"><td>Files</td>{''.join(over)}</tr></tfoot></table></div>"
         + (f"<ul class=\"reasons\">{''.join(notes)}</ul>" if notes else "")
     )
 
@@ -271,18 +324,18 @@ def comparison_view(result: dict) -> str:
         against = f"{bound['low']} to {bound['high']}" if "low" in bound else ""
         gaps.append(f"<li><b>{escape(fields.name_of(row['field']))}</b> measures {shown} "
                     f"against {escape(against)}, reported as information rather than a verdict. "
-                    f"{escape(row.get('why', ''))}</li>")
+                    f"{escape(sentence(row.get('why', '')))}</li>")
     for row in result["rows"]:
         if row["verdict"] != compare.NO_TARGET:
             continue
         field = fields.BY_PATH.get(row["field"])
         shown = number(row.get("value"), field.decimals if field else 3)
         gaps.append(f"<li><b>{escape(fields.name_of(row['field']))}</b> measures {shown}, "
-                    f"and has no target. {escape(row['why'])}</li>")
+                    f"and has no target. {escape(sentence(row['why']))}</li>")
     for row in result["rows"]:
         if row["verdict"] == compare.NOT_MEASURED:
             gaps.append(f"<li><b>{escape(fields.name_of(row['field']))}</b> could not be "
-                        f"placed. {escape(row['why'])}</li>")
+                        f"placed. {escape(sentence(row['why']))}</li>")
 
     on_line = result["counts"].get(compare.ON_THE_LINE, 0)
     verdict = ("Every field sits inside its target." if result["all_inside"]
@@ -305,6 +358,46 @@ def comparison_view(result: dict) -> str:
     )
 
 
+def octaves(measurement: dict) -> str:
+    """The rates the signal also supports, with how well each fits.
+
+    The chosen one is a judgement the registry admits it gets wrong on 8 of 35 known
+    answers, so the runners up are shown rather than left in the structured output.
+    """
+    found = measurement.get("tempo", {})
+    alternatives = found.get("alternatives")
+    if not alternatives:
+        return ""
+    chosen = found.get("bpm")
+    rows = []
+    for one in alternatives:
+        here = abs(one["bpm"] - chosen) < 1e-6 if chosen is not None else False
+        mark = "<span class=\"tag\">reported</span>" if here else ""
+        rows.append(
+            f"<tr><td class=\"name\">{number(one['bpm'], 2)} BPM{mark}</td>"
+            f"<td class=\"blank\">{escape(_ratio(one['ratio']))}</td>"
+            f"<td>{number(one['occupancy'], 3)}</td>"
+            f"<td>{number(one['coverage'], 3)}</td>"
+            f"<td>{one['onsets_fitted']}</td></tr>")
+    return (
+        "<h2>Rates the signal also supports</h2>"
+        "<p>Which of these is the beat is a musical judgement, not a property of the "
+        "signal. Occupancy is the share of grid ticks that carry an onset, coverage the "
+        "share of onsets that sit on a tick.</p>"
+        "<table><thead><tr><th>Rate</th><th>Against the reported one</th>"
+        "<th>Occupancy</th><th>Coverage</th><th>Onsets fitted</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
+    )
+
+
+def _ratio(value: float) -> str:
+    for text, number_ in (("half", 0.5), ("two thirds", 2.0 / 3.0), ("the same", 1.0),
+                          ("one and a half", 1.5), ("double", 2.0)):
+        if abs(value - number_) < 0.01:
+            return text
+    return f"{value:g}"
+
+
 def file_view(measurement: dict, result: dict | None, target: dict | None) -> str:
     source = measurement.get("source", {})
     meta = ", ".join(str(v) for v in (
@@ -325,10 +418,10 @@ def file_view(measurement: dict, result: dict | None, target: dict | None) -> st
         found = measurement.get(block, {})
         if "unmeasurable" in found:
             missing.append(f"<li><b>{escape(block.title())}</b> was not measured. "
-                           f"{escape(found['unmeasurable'])}</li>")
+                           f"{escape(sentence(found['unmeasurable']))}</li>")
         for name, why in (found.get("absent_because") or {}).items():
             missing.append(f"<li><b>{escape(fields.name_of(f'{block}.{name}'))}</b> is not "
-                           f"reported. {escape(why)}</li>")
+                           f"reported. {escape(sentence(why))}</li>")
         for caveat in found.get("caveats", []):
             missing.append(f"<li><b>{escape(block.title())}</b>: {escape(caveat)}.</li>")
 
@@ -337,6 +430,7 @@ def file_view(measurement: dict, result: dict | None, target: dict | None) -> st
         f"<span class=\"meta\">{escape(meta)}</span></div>"
         f"<h2>Measured</h2><table><tbody>{''.join(rows)}</tbody></table>"
         + (f"<ul class=\"reasons\">{''.join(missing)}</ul>" if missing else "")
+        + octaves(measurement)
         + spectrum(measurement, target)
     )
     if result is not None:

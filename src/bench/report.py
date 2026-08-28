@@ -29,10 +29,10 @@ def folder_table(sheet: dict) -> str:
     header = ["track"] + [c["label"] for c in columns]
     body = []
     for row in sheet["files"]:
-        body.append([row["name"]] +
+        body.append([row.get("label", row["name"])] +
                     [_cell(row["values"][c["path"]], c["decimals"]) for c in columns])
 
-    spread_cells, note_cells = ["spread"], ["over"]
+    spread_cells, note_cells = ["spread"], ["files"]
     for c in columns:
         found = sheet["spread"][c["path"]]
         spread_cells.append(BLANK if "withheld" in found

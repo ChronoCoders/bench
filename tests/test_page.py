@@ -36,7 +36,7 @@ def test_a_field_with_no_target_shows_its_value_and_its_reason():
     target = {"name": "t", "band_set": "bench-v1", "evidence": {"n": 2}, "fields": {},
               "withheld": {"loudness.true_peak_dbtp": "the references are lossy"}}
     html = page.comparison_view(compare.against(one, target))
-    assert "the references are lossy" in html
+    assert "The references are lossy" in html, "the reason should start a sentence"
     assert "-1.2" in html
 
 
@@ -70,7 +70,7 @@ def test_the_folder_table_carries_a_spread_row_and_a_count(tmp_path):
         sig.write(out / f"{i}.wav", base * scale)
     html = page.folder_view(folder.measure(out))
     assert "<td>Spread</td>" in html
-    assert "<td>Over</td>" in html
+    assert "<td>Files</td>" in html
     assert "has no spread" in html
 
 
@@ -97,3 +97,24 @@ def test_the_document_is_one_html_page():
     assert html.startswith("<!doctype html>")
     assert html.count("<html") == 1 and html.count("</html>") == 1
     assert "<title>t</title>" in html
+
+
+def test_the_octave_alternatives_are_shown_not_only_computed(tmp_path):
+    x = music.limit(music.build("kick_hat_snare", 88.0, seconds=60.0, jitter=0.004))
+    one = measurement.of_file(sig.write(tmp_path / "one.wav", x))
+    html = page.file_view(one, None, None)
+    assert "Rates the signal also supports" in html
+    for alternative in one["tempo"]["alternatives"]:
+        assert f"{alternative['bpm']:.2f}" in html, (
+            f"{alternative['bpm']} was computed and never shown"
+        )
+    assert html.count("<span class=\"tag\">reported</span>") == 1
+
+
+def test_the_alternatives_check_can_fail(tmp_path):
+    x = music.limit(music.build("kick_hat_snare", 88.0, seconds=60.0, jitter=0.004))
+    one = measurement.of_file(sig.write(tmp_path / "one.wav", x))
+    one["tempo"] = dict(one["tempo"], alternatives=[])
+    assert page.octaves(one) == "", (
+        "the block would claim to show alternatives when there are none"
+    )

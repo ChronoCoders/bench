@@ -6,6 +6,7 @@ taken over. A spread over eight of nine files is not the spread of the record.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from bench import compare, fields, measurement
@@ -14,22 +15,40 @@ from bench.decode import DecodeError
 AUDIO_SUFFIXES = (".wav", ".flac", ".aiff", ".aif", ".mp3", ".m4a", ".ogg", ".opus")
 
 
-COLUMN_PATHS = (
-    "loudness.integrated_lufs",
-    "loudness.lra_lu",
-    "loudness.true_peak_dbtp",
-    "levels.crest_db",
-    "spectral.rollups.under_250_hz_pct",
-    "spectral.rollups.band_60_250_pct",
-    "spectral.band_pct.20_60",
-    "spectral.band_pct.8000_16000",
-    "stereo.correlation",
-    "stereo.width_side_mid_db",
-    "tempo.bpm",
-    "tempo.drift.span_bpm",
+# Grouped so the table can rule between them. The grouping is what the columns
+# measure, not how they are laid out, so it lives with the list rather than in the
+# thing that draws it.
+COLUMN_GROUPS = (
+    ("loudness.integrated_lufs", "loudness.lra_lu", "loudness.true_peak_dbtp",
+     "levels.crest_db"),
+    ("spectral.rollups.under_250_hz_pct", "spectral.rollups.band_60_250_pct",
+     "spectral.band_pct.20_60", "spectral.band_pct.8000_16000"),
+    ("stereo.correlation", "stereo.width_side_mid_db"),
+    ("tempo.bpm", "tempo.drift.span_bpm"),
 )
 
+COLUMN_PATHS = tuple(path for group in COLUMN_GROUPS for path in group)
 COLUMNS = tuple(fields.get(path) for path in COLUMN_PATHS)
+GROUP_STARTS = frozenset(group[0] for group in COLUMN_GROUPS[1:])
+
+
+def labels(names: list[str]) -> dict[str, str]:
+    """Track names with the extension and any shared prefix taken off.
+
+    Six files called "Pull me under (Arabic) Bahrein.wav" and so on differ in one
+    word, and the column is easier to read when only that word is in it. A prefix
+    is only removed when every name carries it and none is left empty.
+    """
+    stems = {name: Path(name).stem for name in names}
+    if len(stems) < 2:
+        return stems
+    shared = os.path.commonprefix(list(stems.values()))
+    if not shared:
+        return stems
+    trimmed = {name: stem[len(shared):].lstrip(" _-") for name, stem in stems.items()}
+    if any(not short for short in trimmed.values()):
+        return stems
+    return trimmed
 
 
 def audio_files(folder: str | Path) -> list[Path]:
@@ -56,6 +75,10 @@ def measure(folder: str | Path, target: dict | None = None) -> dict:
                                if r["field"] in row["values"]}
         rows.append(row)
 
+    short = labels([row["name"] for row in rows])
+    for row in rows:
+        row["label"] = short[row["name"]]
+
     spread = {}
     for column in COLUMNS:
         present = [r["values"][column.path] for r in rows if r["values"][column.path] is not None]
@@ -76,6 +99,7 @@ def measure(folder: str | Path, target: dict | None = None) -> dict:
         "folder": str(folder),
         "columns": [{"path": c.path, "label": c.short, "name": c.name,
                      "decimals": c.decimals, "unit": c.unit,
+                     "starts_group": c.path in GROUP_STARTS,
                      "spread_withheld": c.spread_withheld} for c in COLUMNS],
         "files": rows,
         "measurements": measurements,
