@@ -2,6 +2,10 @@
 
 Copied from the deck so the two tools read the same. Nothing is fetched: a page that
 falls back to a substitute face changes every row height, and the columns are the point.
+
+Chakra Petch and JetBrains Mono, latin and latin-ext only, both under the SIL Open
+Font License. The subsets came from the Google Fonts css2 endpoint and are vendored
+rather than linked, because a page that reaches out is a page that can fail to.
 """
 
 from __future__ import annotations

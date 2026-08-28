@@ -1,0 +1,124 @@
+# Bench
+
+A measurement bench for your own masters. Give it a file, it measures it and shows you
+the numbers. It changes nothing and writes no audio.
+
+Most tools tell you a master is fine. This one tells you what it measured, how sure it
+is, and what it refused to guess.
+
+![Folder mode](docs/folder-mode.png)
+
+## What it measures
+
+| | |
+| - | - |
+| Loudness | Integrated LUFS, loudness range, true peak, sample peak |
+| Levels | Crest, gated level, clipped runs, samples over full scale, direct current |
+| Spectral | Ten bands as a share of total energy, plus rollups under 250 Hz and 60 to 250 Hz |
+| Stereo | Left to right correlation, side over mid width |
+| Tempo | Beats per minute with octave alternatives, grid fit, onsets on the grid, movement across the track |
+| Source | Container, codec, rate, channels, bit depth, and the rate it was measured at |
+
+Anything it cannot derive is absent, with the reason printed next to the gap. There are
+no placeholder values and no filler dashes.
+
+## Four things it does differently
+
+**Loudness is measured twice.** An ffmpeg ebur128 pass and an independent BS.1770-4
+implementation in numpy, sharing no code. The bench reports the gap between them rather
+than an average, so when the two disagree you find out instead of getting the mean of a
+right answer and a wrong one.
+
+**Uncertainty reaches the verdict.** Every measurement carries its own uncertainty, and
+a value whose interval touches a boundary is reported as on the line, not as a pass.
+True peak carries three sources of it: the rounding of the primary instrument, the gap
+between the two instruments, and the oversampling filter length.
+
+**It refuses instead of guessing.** Percentages taken under different band edges are
+different quantities, so comparing them raises rather than warns. A field with no
+uncertainty cannot be placed against a target at all. A tempo peak that lands on the
+edge of the search range is reported as what it is, a truncation, with a caveat saying
+the range chose the octave.
+
+**Targets say what they rest on.** A profile is a data file that records how many
+references it came from, whether those sources were lossy, and which fields it will not
+claim. The guaracha profile ships with five fields withheld and their reasons, because
+two lossy references cannot tell you where a true peak ceiling is.
+
+![On the line](docs/on-the-line.png)
+
+Two masters sitting on a -1.0 dBTP ceiling. Neither is reported as passing.
+
+## Folder mode
+
+Point it at a record and get one table, with a spread per column and the number of files
+that spread covers. A spread over eight of nine files is not the spread of a record, and
+the table says so.
+
+On a nine track album this found a 49.92 point spread in the 60 to 250 Hz band, from
+21.81 to 71.73. That is not a mastering difference. Those tracks are built differently,
+and nothing else showed it.
+
+## The page
+
+Runs on your machine and stays there. A test asserts the page contains no external
+address, no script tag and no import, and the two faces are served from the same
+process.
+
+Colour is a warning, not decoration. A value inside its target gets no colour, because
+not being marked is the signal. Only what is outside is coloured, and on the line gets
+its own treatment because it is rare and it decides whether something ships.
+
+## measuring.md
+
+Twenty five write ups of measurements that were wrong, or of claims about them that
+were. Every one passed its own check at the time. It is the most useful file here.
+
+A peak read as decibels when it was linear amplitude, which said a master was under the
+ceiling while it was nearly 4 dB over. A drift range read at two endpoints, exactly zero
+for any tempo that returns to where it started, so a track moving 6 BPM printed as
+steady. A search range that was an octave prior with nothing saying so. Three mechanisms
+that stopped doing what the documentation claimed and passed every test anyway.
+
+Each entry says what the instrument reported, what was true, how it was caught, and what
+now stops it coming back.
+
+## Running it
+
+Needs Python 3.10 or newer, and ffmpeg and ffprobe on the path.
+
+```
+pip install -e ".[dev]"
+python tools/serve.py "path/to/your/folder"
+```
+
+Then open http://127.0.0.1:8731
+
+## Tests
+
+207 tests. Every measurement claim has a control that can fail, and a negative control
+proving the check has teeth. The rig raises a distinct error when an assertion accepts
+something it was supposed to reject.
+
+```
+python -m pytest
+python tools/mutate.py
+```
+
+The mutation tool breaks the code 41 ways and checks the suite notices, working on a
+copy of the tree rather than the tree itself. All 41 are caught. It has found faults a
+green suite cannot, and five of the ledger entries came from it.
+
+```
+python tools/midiset.py
+```
+
+Known answer material for tempo, built by writing a tempo map into a MIDI file,
+rendering it through the General MIDI samples that ship with Windows, and reading the
+map back out of the file. The answer comes from the artifact, not from the generator.
+
+## Scope
+
+It measures and it reports. It does not process audio, and it will not tell you what to
+change. Mastering is a later layer that reads the same structured measurement and the
+same target, and touches neither.
