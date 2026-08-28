@@ -1,3 +1,13 @@
+"""Break the engine one way at a time and report which test notices.
+
+It works on a copy of the tree, never the tree itself. Each mutant stops at the first
+test that catches it, so the answer is whether a break is noticed rather than how many
+tests notice it. Pass --all for every catcher, which runs the whole suite once per
+mutant. Any other word selects the mutations whose name contains it.
+
+Run it: python tools/mutate.py [--all] [word ...]
+"""
+
 from __future__ import annotations
 
 import re
@@ -469,8 +479,8 @@ MUTANTS = (
         "stop the correction on the condition it was derived from",
         "entry 26, the third: the loop then lands on the boundary, decided by a float",
         MASTER,
-        "            lift = (loudness_aim + (CLEARANCE + 1.0) * loudness_unit",
-        "            lift = (loudness_aim + CLEARANCE * loudness_unit",
+        '            short = floor + CLEARANCE * loudness_unit - current["integrated_lufs"]',
+        '            short = floor - current["integrated_lufs"]',
     ),
     Mutant(
         "measure the filtered samples with the instrument that reads the file",
@@ -554,8 +564,22 @@ def run_suite(work: Path, stop_early: bool = False, only: str | None = None) -> 
     return caught, summary
 
 
+def chosen(argv: list[str]) -> tuple[Mutant, ...]:
+    """Everything, or the ones whose name contains a word given on the command line.
+    A mutation that had to be rewritten is worth running on its own rather than running
+    the other fifty six again to reach it."""
+    words = [a.lower() for a in argv if not a.startswith("--")]
+    if not words:
+        return MUTANTS
+    return tuple(m for m in MUTANTS if any(w in m.name.lower() for w in words))
+
+
 def main() -> int:
     every = "--all" in sys.argv[1:]
+    wanted = chosen(sys.argv[1:])
+    if not wanted:
+        print("no mutation matches " + " ".join(a for a in sys.argv[1:] if not a.startswith("--")))
+        return 2
     stale = clear_stale()
     if stale:
         print(f"cleared {stale} staging {'directory' if stale == 1 else 'directories'} "
@@ -576,8 +600,12 @@ def main() -> int:
         print(f"baseline: {summary}")
         print()
 
+        if wanted != MUTANTS:
+            print(f"{len(wanted)} of {len(MUTANTS)} mutations selected by name")
+            print()
+
         survivors = []
-        for m in MUTANTS:
+        for m in wanted:
             target = work / m.file
             original = target.read_text(encoding="utf-8")
             if m.find not in original:
@@ -607,7 +635,7 @@ def main() -> int:
         if survivors:
             print("mutations nothing caught: " + ", ".join(survivors))
             return 1
-        print(f"all {len(MUTANTS)} mutations caught")
+        print(f"all {len(wanted)} mutations caught")
         return 0
     finally:
         shutil.rmtree(work, ignore_errors=True)
