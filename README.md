@@ -1,7 +1,7 @@
 # Bench
 
-A measurement bench for your own masters. Give it a file, it measures it and shows you
-the numbers. It changes nothing and writes no audio.
+A measurement bench for your own masters. Give it a file, it measures it, shows you the
+numbers, and will correct it against a target without ever touching what you gave it.
 
 Most tools tell you a master is fine. This one tells you what it measured, how sure it
 is, and what it refused to guess.
@@ -71,14 +71,16 @@ its own treatment because it is rare and it decides whether something ships.
 
 ## measuring.md
 
-Twenty five write ups of measurements that were wrong, or of claims about them that
+32 write ups of measurements that were wrong, or of claims about them that
 were. Every one passed its own check at the time. It is the most useful file here.
 
 A peak read as decibels when it was linear amplitude, which said a master was under the
 ceiling while it was nearly 4 dB over. A drift range read at two endpoints, exactly zero
 for any tempo that returns to where it started, so a track moving 6 BPM printed as
-steady. A search range that was an octave prior with nothing saying so. Three mechanisms
-that stopped doing what the documentation claimed and passed every test anyway.
+steady. A search range that was an octave prior with nothing saying so. A limiter search
+that reported twelve of twelve settings passing a test none of them could fail. Four
+mechanisms that stopped doing what the documentation claimed and passed every test
+anyway.
 
 Each entry says what the instrument reported, what was true, how it was caught, and what
 now stops it coming back.
@@ -96,7 +98,7 @@ Then open http://127.0.0.1:8731
 
 ## Tests
 
-207 tests. Every measurement claim has a control that can fail, and a negative control
+280 tests. Every measurement claim has a control that can fail, and a negative control
 proving the check has teeth. The rig raises a distinct error when an assertion accepts
 something it was supposed to reject.
 
@@ -105,9 +107,10 @@ python -m pytest
 python tools/mutate.py
 ```
 
-The mutation tool breaks the code 41 ways and checks the suite notices, working on a
-copy of the tree rather than the tree itself. All 41 are caught. It has found faults a
-green suite cannot, and five of the ledger entries came from it.
+The mutation tool breaks the code 57 ways and checks the suite notices, working on a
+copy of the tree rather than the tree itself. All 57 are caught. It has found faults a
+green suite cannot, and seven of the ledger entries came from it, including three tests
+that were passing for reasons unrelated to what they were written for.
 
 ```
 python tools/midiset.py
@@ -117,8 +120,30 @@ Known answer material for tempo, built by writing a tempo map into a MIDI file,
 rendering it through the General MIDI samples that ship with Windows, and reading the
 map back out of the file. The answer comes from the artifact, not from the generator.
 
+## Mastering
+
+A fourth layer, reading the same measurement and the same target as everything else and
+changing neither. Every correction is a number the measurement implies: a low cut only
+when there is something under 20 Hz to remove, a gain from the distance to the target,
+a ceiling from the target's own limit. What the measurement does not imply is not
+applied, and the plan says which corrections were refused and why.
+
+The limiter is the exception, because an attack and a release are not implied by
+anything. They are searched for, and the winner is the setting whose output keeps every
+band's verdict against the target while moving the balance least. When the target bounds
+no bands there is no criterion, and it says so rather than choosing.
+
+```
+python tools/master_folder.py "path/to/folder" boom-bap "somewhere else"
+```
+
+It never writes over an input. The output folder cannot be the folder the source is in,
+an existing master is never replaced, and a test hashes the input before and after to
+prove the file it read is the file it left. It measures what it wrote, checks it against
+what it predicted, and prints the verdict either side.
+
 ## Scope
 
-It measures and it reports. It does not process audio, and it will not tell you what to
-change. Mastering is a later layer that reads the same structured measurement and the
-same target, and touches neither.
+It measures, it reports, and it corrects against a target. It will not tell you what to
+change, and nothing it does is undone for you: the source file is never the file it
+writes.
