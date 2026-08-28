@@ -363,6 +363,11 @@ def plan(measured: dict, target: dict, filtered: dict | None = None,
         "bound_by": bound_by,
         "from": f"toward {edge}, against {lufs} measured",
         "ceiling_from": section,
+        # The two numbers the gain was actually derived from. After a low cut these
+        # describe the filtered signal, not the file on disk, and the difference
+        # between those is what entry 29 was.
+        "measured_lufs": lufs,
+        "measured_dbtp": peak,
     })
 
     if limiting is not None and limiting.get("correction_db"):

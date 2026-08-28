@@ -30,6 +30,9 @@ INPUT_PEAK_DBTP = -1.5
 SECONDS = 6.0
 SUB_HZ = 8.0
 SUB_AMP = 0.03
+HEAVY_SUB = 0.25
+FOLDER_REFUSAL = "the folder the source is in"
+EXISTS_REFUSAL = "already exists"
 
 
 def _folder(tmp_path):
@@ -103,9 +106,13 @@ def mastered(tmp_path_factory):
 # It never writes over an input.
 
 def test_it_refuses_to_write_into_the_folder_the_source_is_in(tmp_path):
+    """It has to refuse for that reason. With this check gone the destination is the
+    source, the source exists, and the check below it refuses for a different reason
+    and looks the same from outside."""
     path = source(tmp_path)
     with pytest.raises(master.Unsafe) as why:
         master.refuse_unsafe(path, path.parent)
+    assert FOLDER_REFUSAL in str(why.value)
     assert str(path.parent.resolve()) in str(why.value)
 
 
@@ -115,8 +122,9 @@ def test_it_refuses_the_folder_however_the_path_is_spelled(tmp_path):
     path = source(tmp_path)
     for spelling in (path.parent, path.parent / ".", path.parent / "in" / "..",
                      Path(str(path.parent).upper())):
-        with pytest.raises(master.Unsafe):
+        with pytest.raises(master.Unsafe) as why:
             master.refuse_unsafe(path, spelling)
+        assert FOLDER_REFUSAL in str(why.value), spelling
 
 
 def test_it_refuses_to_replace_a_master_it_made_before(tmp_path):
@@ -126,7 +134,10 @@ def test_it_refuses_to_replace_a_master_it_made_before(tmp_path):
     (out / path.name).write_bytes(b"an earlier master")
     with pytest.raises(master.Unsafe) as why:
         master.refuse_unsafe(path, out)
-    assert "already exists" in str(why.value)
+    assert EXISTS_REFUSAL in str(why.value)
+    assert FOLDER_REFUSAL not in str(why.value), (
+        "two refusals that read the same cannot tell you which one fired"
+    )
 
 
 def test_the_refusal_is_not_blanket(tmp_path):
@@ -237,6 +248,30 @@ def test_that_reported_movement_is_not_the_same_for_any_filter(tmp_path):
                 0.05, "a cut at 300 Hz against a cut at 20 Hz")
 
 
+def test_the_gain_is_derived_from_the_signal_the_cut_left(tmp_path):
+    """Entry 29. loudness.measure runs the primary instrument over audio.path and the
+    second over audio.samples, so handing it an Audio whose samples have been replaced
+    measures the filtered signal with one and the file on disk with the other."""
+    path = source(tmp_path, sub=HEAVY_SUB)
+    audio = decode(path)
+    filtered = master.low_cut(audio.samples, audio.sample_rate_hz)
+    result = master.run(path, target_around(measurement.of_file(path), bands=False),
+                        tmp_path / "out")
+    gain = master.step(result["plan"], "gain")
+    assert master.step(result["plan"], "low cut") is not None, "this file needs the cut"
+    rig.control(gain["measured_dbtp"], bs1770.true_peak_dbtp(filtered), 0.001,
+                "the peak the gain was derived from")
+
+
+def test_that_check_can_tell_the_two_signals_apart(tmp_path):
+    """The control on the one above. If the cut moved the peak by less than the check
+    allows, the check could not see which signal was measured."""
+    audio = decode(source(tmp_path, sub=HEAVY_SUB))
+    filtered = master.low_cut(audio.samples, audio.sample_rate_hz)
+    rig.rejects(bs1770.true_peak_dbtp(audio.samples), bs1770.true_peak_dbtp(filtered), 0.001,
+                "the unfiltered peak against the filtered one")
+
+
 def test_no_gain_when_the_target_says_nothing_about_loudness(tmp_path):
     measured = measurement.of_file(source(tmp_path))
     target = target_around(measured, bands=False)
@@ -256,15 +291,29 @@ def test_no_gain_when_the_file_is_already_inside_the_range(tmp_path):
     assert "already inside" in refusal(built, "gain")
 
 
-def test_a_file_below_the_range_is_raised_and_one_above_it_is_lowered(tmp_path):
+def test_a_file_above_its_range_is_brought_to_the_top_and_not_the_bottom(tmp_path):
+    """Aiming always at the bottom would take a file that is a little too loud and
+    turn it down by the whole width of the range."""
+    measured = measurement.of_file(source(tmp_path))
+    here = compare.dig(measured, master.LOUDNESS_FIELD)
+    unit = compare.dig(measured, "loudness.uncertainty.integrated_lufs")
+    room = master.clearance(master.LOUDNESS_FIELD, unit)
+
+    target = target_around(measured, bands=False,
+                           low=round(here - RANGE_WIDTH_LU - PUSH_LU, 3))
+    bound = target["fields"][master.LOUDNESS_FIELD]
+    down = master.plan(measured, target)
+    rig.control(master.step(down, "gain")["db"], bound["high"] - room - here, 0.002,
+                "the gain onto a file that is louder than its target")
+    assert master.step(down, "gain")["db"] < 0.0
+
+
+def test_a_file_below_its_range_is_raised(tmp_path):
     measured = measurement.of_file(source(tmp_path))
     here = compare.dig(measured, master.LOUDNESS_FIELD)
     up = master.plan(measured, target_around(measured, bands=False,
                                              low=round(here + PUSH_LU, 3)))
-    down = master.plan(measured, target_around(
-        measured, bands=False, low=round(here - RANGE_WIDTH_LU - PUSH_LU, 3)))
     assert master.step(up, "gain")["db"] > 0.0
-    assert master.step(down, "gain")["db"] < 0.0
 
 
 def test_render_does_only_what_the_plan_says(tmp_path):
@@ -364,8 +413,10 @@ def test_the_correction_stops_with_room_and_not_on_the_condition(mastered):
     clear it by a whole reporting step or the stop rests on the last bit of a float."""
     search = mastered["limiter_search"]
     assert search is not None and search.get("chosen"), "this file was meant to need one"
-    if not search.get("cleared_the_floor"):
-        pytest.skip("this file could not be lifted that far, which the plan says")
+    assert search["cleared_the_floor"], (
+        "this file is built so the correction can reach its aim. Not reaching it means "
+        "the loop stopped early, which is the fault this test is here for"
+    )
     unit = compare.dig(mastered["before"]["measurement"],
                        "loudness.uncertainty.integrated_lufs")
     low = row(mastered["after"]["comparison"], master.LOUDNESS_FIELD)["bound"]["low"]
