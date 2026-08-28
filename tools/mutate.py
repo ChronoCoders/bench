@@ -26,6 +26,8 @@ LIKELY_CATCHER = {
     "folder.py": "tests/test_folder.py",
     "page.py": "tests/test_page.py",
     "typeface.py": "tests/test_typeface.py",
+    "master.py": "tests/test_master.py",
+    "limiter.py": "tests/test_limiter.py",
 }
 
 DECODE = Path("src/bench/decode.py")
@@ -38,6 +40,8 @@ TEMPO = Path("src/bench/measure/tempo.py")
 COMPARE = Path("src/bench/compare.py")
 FOLDER = Path("src/bench/folder.py")
 PAGE = Path("src/bench/page.py")
+MASTER = Path("src/bench/master.py")
+LIMITER = Path("src/bench/limiter.py")
 
 READ_BODY = '''    data, rate = sf.read(str(path), dtype="float64", always_2d=True)
     return np.ascontiguousarray(data.T), int(rate)'''
@@ -397,6 +401,118 @@ MUTANTS = (
         """    return [r for r in rows
             if not r.get("advisory") and r["verdict"] not in (NO_TARGET, NOT_MEASURED)]""",
         """    return [r for r in rows if r["verdict"] not in (NO_TARGET, NOT_MEASURED)]""",
+    ),
+    Mutant(
+        "charge every peak to the sample the filter delayed it to",
+        "the interpolating filter lags 16 frames, so the reduction lands after the peak",
+        LIMITER,
+        "    delay = (h.size - 1) // 2",
+        "    delay = 0",
+    ),
+    Mutant(
+        "look no further ahead than the smoothing averages",
+        "the elementwise minimum then has to catch a curve smoothed back over the ceiling",
+        LIMITER,
+        "LOOKAHEAD_MULTIPLE = 2",
+        "LOOKAHEAD_MULTIPLE = 1",
+    ),
+    Mutant(
+        "count the release tail as limiting",
+        "an exponential recovery never reaches one, so the whole file reads as reduced",
+        LIMITER,
+        '        "share_over_the_ceiling": round(float((needed < 1.0).mean()), 6),',
+        '        "share_over_the_ceiling": round(float((gain < 1.0).mean()), 6),',
+    ),
+    Mutant(
+        "recover the gain instantly",
+        "a limiter with no release modulates the programme at the rate of its own peaks",
+        LIMITER,
+        "    if release_ms <= 0.0:",
+        "    if True:",
+    ),
+    Mutant(
+        "clear the boundary by half a reporting step",
+        "entry 26, the first of the four: the aim lands on the line rather than inside it",
+        MASTER,
+        "    return CLEARANCE * unit + loudness.TOLERANCE[CROSSCHECK_UNIT[field]]",
+        "    return unit",
+    ),
+    Mutant(
+        "clear only this instrument's own step",
+        "entry 28: the verdict is drawn by the other instrument, on the written file",
+        MASTER,
+        "    return CLEARANCE * unit + loudness.TOLERANCE[CROSSCHECK_UNIT[field]]",
+        "    return CLEARANCE * unit",
+    ),
+    Mutant(
+        "search against a criterion no setting can fail",
+        "entry 27: with no band bounded, every setting keeps every verdict",
+        MASTER,
+        "    if not search.was:",
+        "    if False:",
+    ),
+    Mutant(
+        "check the prediction against the other instrument",
+        "entry 26, the fourth: the gap it finds is the crosscheck the bench already reports",
+        MASTER,
+        '    second = predicted.get("predicted_by", "").startswith("the second instrument")',
+        "    second = False",
+    ),
+    Mutant(
+        "predict the loudness instead of measuring it",
+        "entry 26, the second: limiting removes loudness the gain arithmetic cannot see",
+        MASTER,
+        "CORRECTION_PASSES = 4",
+        "CORRECTION_PASSES = 0",
+    ),
+    Mutant(
+        "stop the correction on the condition it was derived from",
+        "entry 26, the third: the loop then lands on the boundary, decided by a float",
+        MASTER,
+        "            lift = (loudness_aim + (CLEARANCE + 1.0) * loudness_unit",
+        "            lift = (loudness_aim + CLEARANCE * loudness_unit",
+    ),
+    Mutant(
+        "measure the filtered samples with the instrument that reads the file",
+        "entry 29: one number then comes from the low cut and the other from the original",
+        MASTER,
+        '        filtered = {"loudness": second_instrument(base, audio.sample_rate_hz),',
+        '        filtered = {"loudness": loudness.measure(replace(audio, samples=base)),',
+    ),
+    Mutant(
+        "always aim at the bottom of the range",
+        "entry 30: a file above its target then gets pushed further from it",
+        MASTER,
+        '        aim_loud, edge = high - room, f"{high}, the top of the range, less {round(room, 4)}"',
+        '        aim_loud, edge = low + room, f"{low}, the bottom of the range, plus {round(room, 4)}"',
+    ),
+    Mutant(
+        "move a file that is already inside its target",
+        "entry 30: it lands on the edge of a range it was in the middle of",
+        MASTER,
+        "    if placed == compare.INSIDE:",
+        "    if False:",
+    ),
+    Mutant(
+        "write into the folder the source is in",
+        "the only way the destination can be the source, so this is the whole safeguard",
+        MASTER,
+        "    if _same(out_dir, source.parent):",
+        "    if False:",
+    ),
+    Mutant(
+        "replace a master it made before",
+        "nothing here overwrites, and a second run would silently be the only one kept",
+        MASTER,
+        "    if destination.exists():",
+        "    if False:",
+    ),
+    Mutant(
+        "declare the cut residual instead of measuring it",
+        "entry 32: 0.01 was measured on three other tracks and is five times too small",
+        MASTER,
+        "        moved = _cut_moved(measured, filtered)",
+        "        moved = 0.01",
     ),
 )
 
