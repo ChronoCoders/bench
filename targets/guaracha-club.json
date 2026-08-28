@@ -1,0 +1,170 @@
+{
+  "name": "guaracha club",
+  "band_set": "bench-v1",
+  "evidence": {
+    "n": 2,
+    "all_sources_lossy": true,
+    "sources": [
+      {
+        "title": "Hugel and Solto, Jamaican Bam Bam",
+        "file": "13_DJ_M.A.G._MUSIC_-_Jamaican_Bam_Bam_-_HUGEL_SOLTO_FR_(mp3.pm).mp3",
+        "container": "mp3",
+        "codec": "mp3",
+        "measured_at_hz": 44100,
+        "lossy": true
+      },
+      {
+        "title": "Alan Gomez, Matias Mareco and DJ Lucas remix, Raka Taka Taka",
+        "file": "Dj_Alan_Gomez_Matias_Mareco_DJ_Lucas_Rmx_-_Raka_Taka_Taka_(mp3.pm).mp3",
+        "container": "mp3",
+        "codec": "mp3",
+        "measured_at_hz": 44100,
+        "lossy": true
+      }
+    ],
+    "note": "Bounds are the smallest and largest of two measurements, not a distribution. Two references cannot show how wide the style is."
+  },
+  "fields": {
+    "loudness.integrated_lufs": {
+      "low": -10.552,
+      "high": -9.284,
+      "from_lossy": true,
+      "values": [
+        -9.284,
+        -10.552
+      ]
+    },
+    "loudness.lra_lu": {
+      "low": 6.3,
+      "high": 7.28,
+      "from_lossy": true,
+      "values": [
+        7.28,
+        6.3
+      ],
+      "advisory": "two references are not a rule. Loudness range follows the arrangement and the section structure more than the style, so with an evidence count of 2 this is reported as information and no verdict is claimed from it."
+    },
+    "levels.crest_db": {
+      "low": 12.264,
+      "high": 13.1738,
+      "from_lossy": true,
+      "values": [
+        12.264,
+        13.1738
+      ]
+    },
+    "spectral.rollups.under_250_hz_pct": {
+      "low": 62.58,
+      "high": 62.98,
+      "from_lossy": true,
+      "values": [
+        62.98,
+        62.58
+      ]
+    },
+    "spectral.rollups.band_60_250_pct": {
+      "low": 23.64,
+      "high": 35.93,
+      "from_lossy": true,
+      "values": [
+        23.64,
+        35.93
+      ]
+    },
+    "spectral.band_pct.20_60": {
+      "low": 26.65,
+      "high": 39.34,
+      "from_lossy": true,
+      "values": [
+        39.34,
+        26.65
+      ]
+    },
+    "spectral.band_pct.60_120": {
+      "low": 12.09,
+      "high": 32.21,
+      "from_lossy": true,
+      "values": [
+        12.09,
+        32.21
+      ]
+    },
+    "spectral.band_pct.120_250": {
+      "low": 3.72,
+      "high": 11.55,
+      "from_lossy": true,
+      "values": [
+        11.55,
+        3.72
+      ]
+    },
+    "spectral.band_pct.250_500": {
+      "low": 7.81,
+      "high": 9.77,
+      "from_lossy": true,
+      "values": [
+        9.77,
+        7.81
+      ]
+    },
+    "spectral.band_pct.500_1000": {
+      "low": 7.48,
+      "high": 10.65,
+      "from_lossy": true,
+      "values": [
+        7.48,
+        10.65
+      ]
+    },
+    "spectral.band_pct.1000_2000": {
+      "low": 8.64,
+      "high": 9.34,
+      "from_lossy": true,
+      "values": [
+        8.64,
+        9.34
+      ]
+    },
+    "spectral.band_pct.2000_4000": {
+      "low": 4.38,
+      "high": 6.65,
+      "from_lossy": true,
+      "values": [
+        6.65,
+        4.38
+      ]
+    },
+    "spectral.band_pct.4000_8000": {
+      "low": 3.1,
+      "high": 3.33,
+      "from_lossy": true,
+      "values": [
+        3.1,
+        3.33
+      ]
+    },
+    "spectral.band_pct.8000_16000": {
+      "low": 1.34,
+      "high": 1.81,
+      "from_lossy": true,
+      "values": [
+        1.34,
+        1.81
+      ]
+    }
+  },
+  "limits": {
+    "loudness.true_peak_dbtp": {
+      "max": -1.0,
+      "declared_by": "the person this bench is for, as a delivery ceiling",
+      "why_not_seeded": "both references are mp3. Decoding overshoots the encoder's peak and both read over full scale, at plus 1.1 and plus 1.4 dBTP, so a ceiling cannot be measured from them. This bound is a rule, not evidence."
+    }
+  },
+  "withheld": {
+    "loudness.sample_peak_dbfs": "same reason as true peak. Both references decode above full scale.",
+    "spectral.band_pct.16000_20000": "both references are lowpassed by the encoder near 16 kHz, so this band holds the encoder's setting rather than the music.",
+    "stereo.correlation": "joint stereo coding rebuilds the side signal, so correlation from an mp3 is the codec's, not the master's.",
+    "stereo.width_side_mid_db": "same reason as correlation.",
+    "tempo.bpm": "the two references measure 122.00 and 100.00 BPM. Two numbers an octave and a fifth apart do not describe a tempo any track could be checked against."
+  }
+}
