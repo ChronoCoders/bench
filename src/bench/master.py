@@ -12,7 +12,7 @@ It never writes over an input, and it measures what it wrote.
 from __future__ import annotations
 
 import os
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -32,10 +32,10 @@ BELOW_FIELD = "spectral.outside_denominator_pct.below_20_hz"
 CUT_HZ = spectral.DENOMINATOR_HZ[0]
 # Chosen by measuring what it disturbs above itself. Across three tracks the largest
 # band move is 0.16 at order 4, 0.02 at order 8, 0.01 at order 12, and order 16 buys
-# nothing more. 0.01 is twice the 0.005 a percentage is reported to, so the residual
-# is declared rather than claimed away.
+# nothing more. What it moves on the file in hand is measured on the file in hand: a
+# residual carried over from three other tracks is a number typed in, and on a file
+# with a lot under 20 Hz it is five times too small.
 CUT_ORDER = 12
-CUT_RESIDUAL_PCT = 0.01
 
 # The space searched, not values chosen. The result names the winner and says when it
 # sits on an edge of this grid, because a peak at the edge of a search is a truncation.
@@ -47,6 +47,24 @@ RELEASES_MS = (20.0, 60.0, 150.0)
 # clears the boundary by one whole reporting step, which is what "inside" needs.
 CLEARANCE = 2.0
 CORRECTION_PASSES = 4
+# A limiter returns less loudness than the gain put into it, and near saturation it
+# returns almost none. The floor stops the correction asking for a gain that no setting
+# could survive; the ceiling is there because it cannot return more than it was given.
+SLOPE_LIMITS = (0.05, 1.0)
+
+# The plan is built from the second instrument, measuring in memory. The verdict is
+# taken from the primary instrument, reading the written file. Those are not the same
+# number, and the bench already declares how far apart the two are allowed to be. A
+# plan that clears the boundary only by its own instrument's reporting step aims at a
+# line a different instrument will draw somewhere else.
+CROSSCHECK_UNIT = {
+    "loudness.integrated_lufs": "integrated_lu",
+    "loudness.true_peak_dbtp": "true_peak_db",
+}
+
+
+def clearance(field: str, unit: float) -> float:
+    return CLEARANCE * unit + loudness.TOLERANCE[CROSSCHECK_UNIT[field]]
 
 FULL_SCALE_DBTP = 0.0
 SUBTYPE = "PCM_24"
@@ -74,9 +92,10 @@ def refuse_unsafe(source: Path, out_dir: Path) -> Path:
             f"the output folder is the folder the source is in, {out_dir}. Mastering "
             "writes beside its inputs only by overwriting one of them."
         )
+    # The destination can only be the source when the output folder is the source's
+    # folder, which the check above has already refused. There is no second branch
+    # here for that: a branch that cannot be reached cannot be a safeguard.
     destination = out_dir / source.name
-    if _same(destination, source):
-        raise Unsafe(f"the output path is the source itself, {source}")
     if destination.exists():
         raise Unsafe(
             f"{destination} already exists. Nothing here overwrites, so the previous "
@@ -118,25 +137,49 @@ def _one(field: str, value: float, unit: float, target: dict) -> dict:
     return {field: compare.verdict(value, unit, bound)}
 
 
-def _candidate(audio: Audio, pushed: np.ndarray, ceiling_aim: float, attack: float,
-               release: float, was: dict, before: dict, needed: np.ndarray) -> dict:
-    rate = audio.sample_rate_hz
-    gain = limiter.envelope(pushed, rate, ceiling_aim, attack, release, needed)
-    made = replace(audio, samples=pushed * gain)
+@dataclass(frozen=True)
+class _Search:
+    """What every candidate is judged against, none of which changes across the grid."""
+
+    audio: Audio
+    target: dict
+    before: dict
+    was: dict
+    ceiling_aim: float
+
+
+def _slope(first: dict, current: dict, lifted_db: float) -> float:
+    """Loudness out per dB of gain in, measured across the correction so far.
+
+    One before any correction has been made, because there is nothing to measure it
+    from yet. Held inside SLOPE_LIMITS: a limiter near saturation returns almost
+    nothing, and dividing by that would ask for a gain no setting could survive.
+    """
+    if lifted_db <= 0.0 or current is first:
+        return 1.0
+    got = (current["integrated_lufs"] - first["integrated_lufs"]) / lifted_db
+    return min(max(got, SLOPE_LIMITS[0]), SLOPE_LIMITS[1])
+
+
+def _candidate(search: _Search, pushed: np.ndarray, attack: float, release: float,
+               needed: np.ndarray) -> dict:
+    rate = search.audio.sample_rate_hz
+    limited, gain, _ = limiter.shaped(pushed, rate, search.ceiling_aim, attack, release, needed)
+    made = replace(search.audio, samples=limited)
     block = spectral.measure(made)
     reached = bs1770.integrated(made.samples, rate)
-    now = band_verdicts(block, target=None) if False else band_verdicts(block, _candidate.target)
-    changed = sorted(f for f in was if was[f] != now.get(f))
+    now = band_verdicts(block, search.target)
+    changed = sorted(f for f in search.was if search.was[f] != now.get(f))
     over = levels.over_full_scale(made.samples)
     moved = max(abs(new["pct"] - old["pct"])
-                for new, old in zip(block["bands"], before["spectral"]["bands"]))
+                for new, old in zip(block["bands"], search.before["spectral"]["bands"]))
     return {
         "attack_ms": attack,
         "release_ms": release,
         "largest_band_move_pct": round(moved, 4),
         "verdicts_changed": changed,
         "over_full_scale": over,
-        "gain_reduction": limiter.worked(gain),
+        "gain_reduction": limiter.worked(gain, needed),
         "integrated_lufs": round(reached.lufs, 3) if reached else None,
         "accepted": not changed and over == 0,
     }
@@ -151,10 +194,18 @@ def search_limiter(audio: Audio, pushed: np.ndarray, ceiling_aim: float,
     is for is finding the setting that moves the balance least while getting there.
     """
     rate = audio.sample_rate_hz
-    _candidate.target = target
+    search = _Search(audio=audio, target=target, before=before, ceiling_aim=ceiling_aim,
+                     was=band_verdicts(before["spectral"], target))
+    if not search.was:
+        return {
+            "tried": [], "accepted": 0, "chosen": None, "correction_db": 0.0,
+            "no_criterion":
+                "the target bounds no band and no rollup, so keeping every band's verdict "
+                "is a condition no setting can fail. There is nothing here to choose a "
+                "limiter setting by, so none was chosen.",
+        }
     needed = limiter.required_gain(pushed, rate, ceiling_aim)
-    was = band_verdicts(before["spectral"], target)
-    tried = [_candidate(audio, pushed, ceiling_aim, attack, release, was, before, needed)
+    tried = [_candidate(search, pushed, attack, release, needed)
              for attack in ATTACKS_MS for release in RELEASES_MS]
     accepted = [one for one in tried if one["accepted"]]
     best = min(accepted, key=lambda one: one["largest_band_move_pct"]) if accepted else None
@@ -168,7 +219,10 @@ def search_limiter(audio: Audio, pushed: np.ndarray, ceiling_aim: float,
         # ffmpeg reading the written file. They disagree by about the size of the margin
         # being cleared, so the stop condition clears the edge by the whole uncertainty
         # twice over: once for the reporting step, once for that disagreement.
-        floor = loudness_aim
+        # Stop with a whole reporting step of room, not on the condition itself. The
+        # aim below is one uncertainty above it for the same reason: stopping the
+        # moment the condition is met leaves the verdict resting on the last bit.
+        floor = loudness_aim + loudness_unit
         total, current = 0.0, best
         for _ in range(CORRECTION_PASSES):
             if current["integrated_lufs"] - CLEARANCE * loudness_unit >= floor:
@@ -176,14 +230,17 @@ def search_limiter(audio: Audio, pushed: np.ndarray, ceiling_aim: float,
             # Aim one uncertainty above the condition rather than at it. Landing on
             # the stop condition means landing on the boundary it was derived from,
             # where the comparison is decided by the last bit of a float.
-            total += (loudness_aim + (CLEARANCE + 1.0) * loudness_unit
-                      - current["integrated_lufs"])
+            short = floor + CLEARANCE * loudness_unit - current["integrated_lufs"]
+            # A dB of gain into a limiter is not a dB of loudness out of it. How much
+            # it is worth is measured from the passes already taken rather than assumed
+            # to be one, which is what left this loop stopping short of its own aim.
+            lift = short / _slope(best, current, total)
+            total += lift
             lifted = pushed * (10.0 ** (total / 20.0))
             again = limiter.required_gain(lifted, rate, ceiling_aim)
-            tryout = _candidate(audio, lifted, ceiling_aim, best["attack_ms"],
-                                best["release_ms"], was, before, again)
+            tryout = _candidate(search, lifted, best["attack_ms"], best["release_ms"], again)
             if not tryout["accepted"]:
-                total -= loudness_aim - current["integrated_lufs"]
+                total -= lift
                 break
             current = tryout
         if total:
@@ -210,6 +267,16 @@ def search_limiter(audio: Audio, pushed: np.ndarray, ceiling_aim: float,
     return out
 
 
+def _cut_moved(measured: dict, filtered: dict | None) -> float | None:
+    """The largest band the cut actually moved on this file, once it has been made.
+    Absent on the first plan, which is built before anything has been filtered."""
+    after = compare.dig(filtered or {}, "spectral.bands")
+    before = compare.dig(measured, "spectral.bands")
+    if not after or not before:
+        return None
+    return round(max(abs(a["pct"] - b["pct"]) for a, b in zip(after, before)), 4)
+
+
 def plan(measured: dict, target: dict, filtered: dict | None = None,
          limiting: dict | None = None) -> dict:
     steps, refused = [], []
@@ -217,13 +284,16 @@ def plan(measured: dict, target: dict, filtered: dict | None = None,
     below = compare.dig(measured, BELOW_FIELD)
     resolution = compare.dig(measured, "spectral.uncertainty.every_percentage")
     if isinstance(below, (int, float)) and resolution is not None and below > resolution:
-        steps.append({
+        cut = {
             "correction": "low cut",
             "hz": CUT_HZ,
             "order": CUT_ORDER,
             "from": f"{BELOW_FIELD} is {below}, above the {resolution} it is reported at",
-            "disturbs_bands_by_up_to_pct": CUT_RESIDUAL_PCT,
-        })
+        }
+        moved = _cut_moved(measured, filtered)
+        if moved is not None:
+            cut["moved_bands_by_pct"] = moved
+        steps.append(cut)
     elif isinstance(below, (int, float)):
         refused.append({
             "correction": "low cut",
@@ -252,11 +322,28 @@ def plan(measured: dict, target: dict, filtered: dict | None = None,
                                "to raise the file to"})
         return _finish(steps, refused, None, None, 0.0)
 
+    bound = target["fields"][LOUDNESS_FIELD]
+    high = bound.get("high")
+    placed = compare.verdict(lufs, lufs_unit, bound)
+    if placed == compare.INSIDE:
+        refused.append({
+            "correction": "gain",
+            "why": f"{lufs} LUFS is already inside {low} to {high} once the {lufs_unit} "
+                   "this measurement can resolve is counted. A file inside its target "
+                   "does not get moved to the edge of it.",
+        })
+        return _finish(steps, refused, lufs, peak, 0.0)
+
     ceiling, section = _bound(target, PEAK_FIELD, "max")
     if ceiling is None:
         ceiling, section = FULL_SCALE_DBTP, "full scale, because the target declares no ceiling"
-    aim = ceiling - CLEARANCE * peak_unit
-    aim_loud = low + CLEARANCE * lufs_unit
+    aim = ceiling - clearance(PEAK_FIELD, peak_unit)
+    # Toward the near edge of the range, not always the bottom of it.
+    room = clearance(LOUDNESS_FIELD, lufs_unit)
+    if high is not None and lufs > (low + high) / 2.0:
+        aim_loud, edge = high - room, f"{high}, the top of the range, less {round(room, 4)}"
+    else:
+        aim_loud, edge = low + room, f"{low}, the bottom of the range, plus {round(room, 4)}"
 
     want_loud = aim_loud - lufs
     want_room = aim - peak
@@ -270,20 +357,11 @@ def plan(measured: dict, target: dict, filtered: dict | None = None,
         gain, bound_by = want_room, "the ceiling"
         shortfall = round(want_loud - want_room, 3)
 
-    if abs(gain) <= lufs_unit and limiting is None:
-        refused.append({
-            "correction": "gain",
-            "why": f"the file is already within {lufs_unit} LU of the target, which is "
-                   "what this measurement can resolve",
-        })
-        return _finish(steps, refused, lufs, peak, 0.0)
-
     steps.append({
         "correction": "gain",
         "db": round(gain, 3),
         "bound_by": bound_by,
-        "from": f"{low} plus {round(CLEARANCE * lufs_unit, 4)} to clear the boundary, "
-                f"against {lufs} measured",
+        "from": f"toward {edge}, against {lufs} measured",
         "ceiling_from": section,
     })
 
@@ -297,7 +375,8 @@ def plan(measured: dict, target: dict, filtered: dict | None = None,
         if chosen is None:
             refused.append({
                 "correction": "limiter",
-                "why": f"none of the {len(limiting['tried'])} settings tried kept every "
+                "why": limiting.get("no_criterion") or
+                       f"none of the {len(limiting['tried'])} settings tried kept every "
                        "band's verdict against the target, so the gain was held at the "
                        "ceiling instead",
                 "loudness_unreachable_lu": shortfall,
@@ -317,6 +396,14 @@ def plan(measured: dict, target: dict, filtered: dict | None = None,
             })
             if "at_search_edge" in limiting:
                 steps[-1]["at_search_edge"] = limiting["at_search_edge"]
+            if not limiting.get("cleared_the_floor", True):
+                steps[-1]["stopped_at_lufs"] = chosen["integrated_lufs"]
+                steps[-1]["why_it_stopped"] = (
+                    f"{CORRECTION_PASSES} measured passes lifted the gain as far as this "
+                    f"setting would carry it, and it reached {chosen['integrated_lufs']} "
+                    f"LUFS against {round(aim_loud, 3)} aimed at. Whether that is inside "
+                    "the target is decided by the output, not here."
+                )
 
     predicted_peak = min(round(peak + gain, 3), round(aim, 3))
     predicted_lufs = round(lufs + gain, 3)
@@ -356,8 +443,8 @@ def render(audio: Audio, built: dict) -> np.ndarray:
         samples = samples * (10.0 ** (gain["db"] / 20.0))
     squash = step(built, "limiter")
     if squash:
-        samples = limiter.apply(samples, audio.sample_rate_hz, squash["ceiling_dbtp"],
-                                squash["attack_ms"], squash["release_ms"])
+        samples, _ = limiter.apply(samples, audio.sample_rate_hz, squash["ceiling_dbtp"],
+                                   squash["attack_ms"], squash["release_ms"])
     return samples
 
 
@@ -375,7 +462,10 @@ def run(path: str | Path, target: dict, out_dir: str | Path) -> dict:
     base = audio.samples
     if step(first, "low cut"):
         base = low_cut(audio.samples, audio.sample_rate_hz)
-        filtered = {"loudness": loudness.measure(replace(audio, samples=base))}
+        # spectral.measure reads samples and nothing else, so a replaced Audio is safe
+        # here in a way it is not for loudness. second_instrument says why.
+        filtered = {"loudness": second_instrument(base, audio.sample_rate_hz),
+                    "spectral": spectral.measure(replace(audio, samples=base))}
 
     without = plan(before, target, filtered)
     limiting = None
@@ -394,6 +484,7 @@ def run(path: str | Path, target: dict, out_dir: str | Path) -> dict:
     sf.write(str(destination), render(audio, built).T, audio.sample_rate_hz, subtype=SUBTYPE)
 
     after = measurement.of_file(destination)
+    graded = compare.against(after, target)
     return {
         "method": METHOD,
         "input": str(source),
@@ -401,8 +492,26 @@ def run(path: str | Path, target: dict, out_dir: str | Path) -> dict:
         "plan": built,
         "limiter_search": limiting,
         "before": {"measurement": before, "comparison": compare.against(before, target)},
-        "after": {"measurement": after, "comparison": compare.against(after, target)},
+        "after": {"measurement": after, "comparison": graded},
         "prediction": _held(built, after),
+        "reached": reached(after, graded),
+    }
+
+
+def second_instrument(samples: np.ndarray, rate: int) -> dict:
+    """Loudness and peak of samples that are not on disk.
+
+    loudness.measure runs the primary instrument over audio.path and the second over
+    audio.samples. Handing it an Audio whose samples have been replaced measures the
+    file for one number and the replacement for the other, and calls the difference
+    between them instrument disagreement. Nothing in this module does that.
+    """
+    reached = bs1770.integrated(samples, rate)
+    return {
+        "method": bs1770.METHOD,
+        "measured_from": "samples in memory, by the second instrument only",
+        "integrated_lufs": None if reached is None else round(reached.lufs, 4),
+        "true_peak_dbtp": bs1770.true_peak_dbtp(samples),
     }
 
 
@@ -410,7 +519,28 @@ def step_ceiling(target: dict, measured: dict) -> float:
     ceiling, _ = _bound(target, PEAK_FIELD, "max")
     if ceiling is None:
         ceiling = FULL_SCALE_DBTP
-    return ceiling - CLEARANCE * compare.dig(measured, "loudness.uncertainty.true_peak_dbtp")
+    return ceiling - clearance(
+        PEAK_FIELD, compare.dig(measured, "loudness.uncertainty.true_peak_dbtp"))
+
+
+def reached(after: dict, comparison: dict) -> dict:
+    """Where the output landed on the two fields the plan aims at.
+
+    A plan that ran is not a plan that arrived. The plan is built from the input and
+    cannot know what the output will measure, so this is read off the output.
+    """
+    out = {"arrived": True, "fields": {}}
+    for field in (LOUDNESS_FIELD, PEAK_FIELD):
+        row = next((r for r in comparison["rows"] if r["field"] == field), None)
+        if row is None or "value" not in row:
+            out["fields"][field] = {"verdict": compare.NOT_MEASURED}
+            out["arrived"] = False
+            continue
+        out["fields"][field] = {"value": row["value"], "uncertainty": row.get("uncertainty"),
+                                "verdict": row["verdict"], "deviation": row.get("deviation")}
+        if row["verdict"] != compare.INSIDE:
+            out["arrived"] = False
+    return out
 
 
 def _held(built: dict, after: dict) -> dict:

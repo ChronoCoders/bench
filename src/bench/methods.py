@@ -463,6 +463,90 @@ _METHODS = (
             "test_silence_has_no_tempo",
         ),
     ),
+    Method(
+        id="master/gain-cut-and-searched-limiter",
+        measures="nothing. It is the one method here that changes a signal rather than "
+        "reading one, and it is listed so that what it changes has the same registry entry "
+        "every measurement has.",
+        computed_from="the same Measurement and Target the rest of the bench produces. A low "
+        "cut at 20 Hz when the file reports more energy below it than a percentage is "
+        "reported to. A gain from the distance between the measured loudness and the near "
+        "edge of the target range. A ceiling from the target's own true peak limit. Attack "
+        "and release from a search over four attacks and three releases, keeping the "
+        "settings whose output leaves every band's verdict against the target where it was "
+        "and choosing the one that moved the balance least.",
+        failure_modes=(
+            "A correction aimed exactly at a boundary is not inside it. Every aim clears its "
+            "boundary by two of the measurement's uncertainties plus the crosscheck tolerance "
+            "the bench declares for that field, because the plan is built by the second "
+            "instrument in memory and the verdict is taken from the primary instrument "
+            "reading the written file. Entries 26 and 28.",
+            "Limiting removes loudness, and how much depends on the material inside the "
+            "attack window rather than on anything the gain arithmetic can see. The gain is "
+            "corrected across measured passes and stops when the measurement clears the "
+            "floor, not when a formula says it should have.",
+            "The search criterion is verdicts against the target. A target that bounds no "
+            "band or rollup gives a criterion no setting can fail, which would accept "
+            "everything and report a count that reads like evidence. It refuses to choose "
+            "instead, and says so. Entry 27.",
+            "Loudness that the limiter cannot reach without changing a verdict is not "
+            "reached. The plan says how much is missing rather than reporting the run as "
+            "done because it ran.",
+            "A gain derived only from a floor would move a file that is already inside its "
+            "target down to the edge of it. A file inside its target is left alone. Entry 30.",
+            "The low cut moves the bands above it by an amount that depends on how much is "
+            "below 20 Hz, so the plan measures what it moved on the file in hand rather than "
+            "carrying a residual over from other tracks. Entry 32.",
+            "It can write a file that is worse. Nothing here judges the result by ear, and "
+            "the verdicts it reports are against a target seeded from three lossy references.",
+        ),
+        cross_check="It measures what it wrote, from the file on disk and with both "
+        "instruments, and checks the output against what the plan predicted using the "
+        "instrument that made the prediction. The before and after comparisons are the same "
+        "comparison the folder table uses.",
+        controls=(
+            "test_it_refuses_to_write_into_the_folder_the_source_is_in",
+            "test_it_refuses_the_folder_however_the_path_is_spelled",
+            "test_it_refuses_to_replace_a_master_it_made_before",
+            "test_the_refusal_is_not_blanket",
+            "test_the_input_is_the_same_file_afterwards",
+            "test_that_byte_check_can_fail",
+            "test_the_aim_leaves_a_whole_step_of_daylight",
+            "test_aiming_by_one_uncertainty_leaves_none",
+            "test_the_clearance_covers_the_gap_between_the_two_instruments",
+            "test_a_low_cut_is_applied_when_there_is_something_under_20_hz",
+            "test_a_low_cut_is_refused_when_there_is_not",
+            "test_the_plan_reports_what_the_cut_actually_moved",
+            "test_that_reported_movement_is_not_the_same_for_any_filter",
+            "test_no_gain_when_the_target_says_nothing_about_loudness",
+            "test_no_gain_when_the_file_is_already_inside_the_range",
+            "test_a_file_below_the_range_is_raised_and_one_above_it_is_lowered",
+            "test_render_does_only_what_the_plan_says",
+            "test_a_target_that_bounds_no_band_refuses_to_limit",
+            "test_a_target_that_bounds_bands_does_search",
+            "test_a_prediction_is_checked_against_the_instrument_that_made_it",
+            "test_checking_it_against_the_other_one_would_not_hold",
+            "test_the_file_started_outside_the_target",
+            "test_the_output_is_measured_and_the_prediction_holds",
+            "test_the_peak_lands_inside_the_ceiling_not_on_it",
+            "test_the_loudness_lands_inside_the_target",
+            "test_the_correction_stops_with_room_and_not_on_the_condition",
+            "test_it_says_what_the_limiter_took",
+            "test_the_peak_it_limits_is_the_one_between_samples",
+            "test_reading_samples_instead_would_fail_this",
+            "test_a_signal_under_the_ceiling_is_returned_untouched",
+            "test_that_untouched_check_can_fail",
+            "test_the_lookahead_is_wider_than_the_smoothing",
+            "test_that_property_is_the_lookahead_and_not_luck",
+            "test_the_release_takes_the_time_it_says",
+            "test_the_release_check_can_fail",
+            "test_the_reduction_lands_on_the_peak_not_after_it",
+            "test_that_alignment_check_can_fail",
+            "test_what_it_reports_about_its_own_work",
+            "test_the_envelope_meets_the_ceiling_without_the_trim",
+            "test_the_ceiling_check_can_fail",
+        ),
+    ),
 )
 
 METHODS = {m.id: m for m in _METHODS}
