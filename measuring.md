@@ -705,6 +705,42 @@ Each profile therefore records the source format per field, the same way it
 records `evidence.n`. A field seeded from a lossy source is marked as such, and a
 field that a lossy source cannot support is absent rather than filled in.
 
+### The quoted figure that the measurement contradicted
+
+The boom bap profile was asked for on a stated premise: that the style carries a
+much heavier 60 to 250 band than guaracha. That figure was quoted, not measured.
+
+Measured across three references it runs 18.37 to 36.22 percent. Guaracha, from
+two, runs 23.64 to 35.93. Not heavier. Overlapping almost exactly, and the
+lightest single value across both sets belongs to the boom bap side.
+
+This is the rule above doing the only useful thing a rule like it can do. Had the
+premise been seeded, the profile would have carried a bound nothing measured
+supports, and every track checked against it would have been judged against a
+number that came from memory. The premise is recorded in the profile's evidence
+block next to the measurement that contradicts it, because a profile that
+silently disagrees with the reason it was built teaches nobody anything.
+
+One reference was dropped from that set, and dropping it is recorded too. `SICKO
+MODE` is a bootleg re-edit rather than a released master, minus 4.8 LUFS against
+minus 8.4 to minus 9.7 for the other three, with 63732 clipped runs and 627823
+samples over full scale. **Removing a reference to tighten a bound is choosing
+the evidence, so the profile names what was removed and why.** The distinction
+that makes it legitimate here is that the file is not what it claims to be, which
+is a fact about the source rather than a preference about the answer.
+
+### Where the guaracha references went
+
+`tools/seed_target.py` can no longer rebuild the guaracha profile. Both mp3s were
+on the machine when it was seeded and are not there now. The committed
+`targets/guaracha-club.json` is the only record of those measurements, which is
+why the profile stores the filename, container, codec and measured rate of every
+source alongside the numbers.
+
+The seeder skips a profile whose references are gone rather than failing, and
+says so, because the alternative found here was that one missing profile stopped
+a second one from being written at all.
+
 ## Carried over, still binding
 
 - **A measurement that is blind exactly where it matters is worse than none.** On

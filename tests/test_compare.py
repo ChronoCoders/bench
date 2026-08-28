@@ -220,13 +220,51 @@ def test_a_well_formed_target_loads(tmp_path):
     assert compare.load(write_target(tmp_path, body))["evidence"]["n"] == 2
 
 
-def test_the_shipped_guaracha_target_loads_and_says_what_it_rests_on():
-    loaded = compare.load(TARGETS / "guaracha-club.json")
-    assert loaded["evidence"]["n"] == 2
-    assert loaded["evidence"]["all_sources_lossy"] is True
-    assert all(f["from_lossy"] for f in loaded["fields"].values())
-    assert "loudness.true_peak_dbtp" not in loaded["fields"]
-    assert "loudness.true_peak_dbtp" in loaded["limits"]
+def shipped():
+    return sorted(TARGETS.glob("*.json"))
+
+
+@pytest.mark.parametrize("path", shipped(), ids=lambda p: p.stem)
+def test_every_shipped_target_says_what_it_rests_on(path):
+    loaded = compare.load(path)
+    evidence = loaded["evidence"]
+    assert evidence["n"] == len(evidence["sources"]), (
+        "the evidence count does not match the number of sources listed"
+    )
+    assert evidence["n"] >= 1
+    if evidence.get("all_sources_lossy"):
+        assert all(source["lossy"] for source in evidence["sources"])
+        assert all(f["from_lossy"] for f in loaded["fields"].values())
+        assert "loudness.true_peak_dbtp" not in loaded["fields"], (
+            "a lossy reference cannot say where a true peak sits"
+        )
+        assert "loudness.true_peak_dbtp" in loaded["limits"]
+    for name, bound in loaded["fields"].items():
+        assert len(bound["values"]) == evidence["n"], (
+            f"{name} was seeded from a different number of files than the evidence count"
+        )
+        assert bound["low"] == min(bound["values"])
+        assert bound["high"] == max(bound["values"])
+
+
+@pytest.mark.parametrize("path", shipped(), ids=lambda p: p.stem)
+def test_a_dropped_reference_is_named_with_its_reason(path):
+    evidence = compare.load(path)["evidence"]
+    for dropped in evidence.get("excluded", []):
+        assert dropped["file"] and dropped["why"], (
+            "a reference was removed from a profile without saying which or why"
+        )
+        assert dropped["file"] not in [s["file"] for s in evidence["sources"]]
+
+
+def test_the_shipped_target_check_can_fail(tmp_path):
+    body = {"name": "t", "band_set": "bench-v1",
+            "evidence": {"n": 3, "sources": [{"file": "a", "lossy": True}]},
+            "fields": {}}
+    loaded = compare.load(write_target(tmp_path, body))
+    assert loaded["evidence"]["n"] != len(loaded["evidence"]["sources"]), (
+        "the count check would accept a profile claiming more sources than it lists"
+    )
 
 
 def test_a_real_file_compares_against_the_shipped_target(tmp_path):
