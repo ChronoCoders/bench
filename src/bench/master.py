@@ -20,7 +20,7 @@ import soundfile as sf
 from scipy.signal import butter, sosfiltfilt
 
 from bench import compare, limiter, measurement
-from bench.decode import Audio, decode
+from bench.decode import Audio, DecodeError, decode
 from bench.measure import bs1770, levels, loudness, spectral
 
 METHOD = "master/gain-cut-and-searched-limiter"
@@ -518,6 +518,27 @@ def second_instrument(samples: np.ndarray, rate: int) -> dict:
         "integrated_lufs": None if reached is None else round(reached.lufs, 4),
         "true_peak_dbtp": bs1770.true_peak_dbtp(samples),
     }
+
+
+def run_each(paths, target: dict, out_dir, watching=None) -> tuple[list[dict], list[dict]]:
+    """Master a list of files into one folder, and say which ones it could not.
+
+    A file it refuses does not stop the rest. It comes back with the reason, because a
+    run that quietly did eight of nine is a run that has to be counted by hand.
+
+    `watching` is called with the name, how many are finished and how many there are,
+    before each file. It is how a caller that is not a terminal shows progress.
+    """
+    paths = list(paths)
+    done, failed = [], []
+    for path in paths:
+        if watching is not None:
+            watching(Path(path).name, len(done) + len(failed), len(paths))
+        try:
+            done.append(run(path, target, out_dir))
+        except (Unsafe, Unmasterable, DecodeError, compare.BandSetMismatch) as why:
+            failed.append({"name": Path(path).name, "why": str(why)})
+    return done, failed
 
 
 def step_ceiling(target: dict, measured: dict) -> float:

@@ -17,12 +17,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from bench import compare, fields, master, page, report
-from bench.decode import DecodeError
+from bench import compare, fields, folder, master, page, report
 
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = ROOT / "targets"
-READABLE = (".wav", ".flac", ".aiff", ".aif", ".mp3", ".m4a", ".ogg")
 PAGE = "mastered.html"
 
 SUMMARY = ("loudness.integrated_lufs", "loudness.true_peak_dbtp", "levels.crest_db")
@@ -30,6 +28,11 @@ SUMMARY = ("loudness.integrated_lufs", "loudness.true_peak_dbtp", "levels.crest_
 
 def _cell(value, decimals):
     return "" if value is None else f"{value:.{decimals}f}"
+
+
+def audio_in(where: Path) -> list[Path]:
+    return sorted(p for p in where.iterdir()
+                  if p.is_file() and p.suffix.lower() in folder.AUDIO_SUFFIXES)
 
 
 def summary_table(done: list[dict]) -> str:
@@ -64,18 +67,12 @@ def main() -> int:
     if len(sys.argv) < 4:
         print(__doc__)
         return 2
-    folder, slug, out_dir = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
+    where, slug, out_dir = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
     target = json.loads((TARGETS / f"{slug}.json").read_text(encoding="utf-8"))
 
-    done, failed = [], []
-    for path in sorted(p for p in folder.iterdir()
-                       if p.is_file() and p.suffix.lower() in READABLE):
-        try:
-            done.append(master.run(path, target, out_dir))
-        except (master.Unsafe, master.Unmasterable, DecodeError, compare.BandSetMismatch) as why:
-            failed.append((path.name, str(why)))
-            continue
-        print(report.master_table(done[-1]))
+    done, failed = master.run_each(audio_in(where), target, out_dir)
+    for one in done:
+        print(report.master_table(one))
         print()
 
     print()
@@ -83,8 +80,8 @@ def main() -> int:
     print(f"Against {target['name']}, from {n} reference" + ("s" if n != 1 else ""))
     print()
     print(summary_table(done))
-    for name, why in failed:
-        print(f"\nNot mastered: {name}. {why}")
+    for one in failed:
+        print(f"\nNot mastered: {one['name']}. {one['why']}")
     if done:
         where = out_dir / PAGE
         where.write_text(page.document(
