@@ -678,6 +678,84 @@ Three mechanisms in this module have now turned out not to do what the file said
 
 The lesson that is new is about my own method rather than the code. Twice in a row I answered a question by measuring two things that differed in more than the one way I was studying. Entry 24 says choosing a control at the level you expect puts it below where the mechanism acts. This is the same fault moved into the comparison itself: **a difference between two measurements is only evidence about the thing you changed if it is the only thing that changed**, and an evaluation range is exactly the kind of thing that travels quietly with a change and gets read as its result.
 
+### 26. Four boundaries, all missed the same way
+
+The mastering layer decides a gain from a measurement and aims it at a target. Four faults came out of building it, and they are one fault seen from four sides: **a plan that arrives exactly at a boundary has not arrived inside it.**
+
+**Aiming by half a step.** An uncertainty here is half the step a value is reported in. True peak is reported to 0.1 dB, so its uncertainty is 0.05. The first version aimed at `ceiling - uncertainty`, which puts the top of the measurement's interval exactly on the ceiling. `compare.verdict` calls that inside only because `-1.05 + 0.05` happens to land at `-1.0000000000000002` rather than at `-1.0`. The verdict was being decided by the last bit of a float. It now aims two uncertainties under, which is one whole reporting step of daylight, and a test asserts the daylight rather than the verdict.
+
+**The limiter takes loudness the arithmetic cannot see.** The gain is worked out from the file's measured loudness. Then the limiter runs, and limiting removes loudness. The arithmetic has no way to know how much, because how much depends on the crest of the material inside the attack window. The first version predicted the loudness it would reach and missed by several LU. It now lifts the gain across measured passes and stops when the measurement says it is inside, not when a formula says it should be.
+
+**Stopping on the condition you were derived from.** The correction loop above stopped when the reached loudness cleared the floor. Aiming at exactly the stop condition means aiming at the boundary the stop condition was derived from, where the comparison is again decided by the last bit. It now aims one uncertainty above the condition, so the loop stops with room rather than on the line.
+
+**A prediction checked against the instrument that did not make it.** The plan is built in memory by the second instrument. The check read the primary instrument's number off the written file, found a gap the size of the two instruments' disagreement, and reported the plan as failed. The bench already reports that disagreement as its own field. The prediction now records which instrument made it and is checked against that one.
+
+The first, third and fourth are the same mistake: a number was compared against a boundary without asking what the number's own uncertainty was, or which instrument drew the boundary. That is the thing this whole bench exists to stop, made in the layer built last.
+
+### 27. A criterion that no setting could fail
+
+The limiter's attack and release are chosen by search. The criterion is the one the user set: keep the output's spectral balance where the input's was. What the code checks is that every band's verdict against the target is unchanged.
+
+On a synthetic test file that criterion accepted all twelve settings, including one that moved a band by 38 percentage points. The target used in that test bounds loudness and true peak and no bands at all. With no band bounded there are no verdicts to keep, so "no verdict changed" is true of everything, and the search reported `12 of 12 settings kept every band's verdict` while choosing between things it had not compared.
+
+This is entry 11 again, in the one place I had not looked for it. A control that cannot fail proves nothing, and a **criterion** that cannot fail chooses nothing. The difference is that a control which cannot fail is silent, while this one printed a number that read like evidence.
+
+The search now refuses when the target bounds no band or rollup, and says so in the plan: there is nothing here to choose a setting by, so none was chosen. Both shipped profiles bound ten bands and two rollups, so on real work the criterion is real. It took a target that bounds nothing to show that the code had never checked whether it had a criterion at all.
+
+### 28. The clearance that cleared the wrong instrument's line
+
+The plan is built from the second instrument measuring samples in memory. The verdict is taken from the primary instrument reading the written file. Those are two different numbers, and the bench already declares how far apart they are allowed to be before it complains: 0.15 dB on true peak, 0.05 LU on integrated loudness.
+
+The plan cleared the ceiling by two of its own uncertainties, 0.1 dB, and aimed at -1.1 dBTP. The written file measured -1.1 by the second instrument and -1.0 by the primary. The verdict is taken from the primary, so the file landed on the line, and because the two instruments now disagreed by 0.1 the reported uncertainty grew to match, which pushed it further onto the line rather than less.
+
+So a clearance derived from the input's own uncertainty cannot clear a boundary that a different instrument will draw on a different file. The clearance now adds the crosscheck tolerance the bench already declares for that field. It costs 0.15 dB of loudness on the peak and 0.05 LU on the loudness, and it is a number the bench already stands behind rather than one chosen to make this case work.
+
+### 29. Measuring a file when the samples were in memory
+
+`loudness.measure` runs the primary instrument over `audio.path` and the second instrument over `audio.samples`. The mastering layer wanted the loudness of the signal after its low cut, and got it with `loudness.measure(replace(audio, samples=filtered))`.
+
+That measured the filtered samples with one instrument and the original file on disk with the other. The primary number was the unfiltered file. The gain was then derived from it, and the crosscheck delta, which is what the uncertainty is built from, was reporting the size of the low cut as instrument disagreement.
+
+The output landed 0.15 dB under where the plan said it would, and the prediction check is what noticed. Nothing else could have: every number involved was plausible, and both instruments were working correctly on the inputs they were given.
+
+The layer no longer calls `loudness.measure` on anything that is not a file. It has its own `second_instrument`, which takes samples and a rate, says in its result that it measured samples in memory with one instrument, and carries the reason in its docstring so the next person does not reach for the convenient call.
+
+The general shape: **a dataclass field that is quietly a second source of truth.** `Audio` carries both samples and the path they came from, and `replace` makes it easy to change one and keep the other. `spectral.measure` reads only samples and is safe. `loudness.measure` reads both and is not. Nothing in the type says which.
+
+### 30. The gain that turned down a file that was already right
+
+If a target says a track should sit between -12 and -6 LUFS and a track sits at -9, there is nothing to do. The first version computed its gain as `low + clearance - measured` regardless, which for that track is -2.85 dB. It would have turned down every track already inside its target, to the bottom edge of it, and reported that as reaching the target.
+
+Nothing caught this because the test file was well below the range, which is the case the layer was written for and the only one it was ever tried on. It now places the file against the bound first and refuses when the file is already inside, and when it is outside it aims at the near edge rather than always at the bottom.
+
+The reason this is worth an entry is not the arithmetic. It is that the layer was built, run, and read on one file, and one file cannot show you what a rule does to the cases it was not built from. That is the same standing warning as the target profiles, which is why `evidence.n` is on the page.
+
+### 31. A safety net that could not fire, and a reduction that arrived late
+
+Two findings in the limiter, from writing its first controls.
+
+**The elementwise minimum.** The last line of the gain envelope took the minimum of the smoothed curve and the gain the ceiling requires, and the docstring said why: smoothing a gain curve can lift it back above what a sample needed, and one sample over is still over. The control written for it could not make it fire on any signal.
+
+It cannot fire. The running minimum looks over twice the attack window and the smoothing averages over one, so every value the average is taken over is already at or below what the sample in the middle needed. The line is unreachable by construction, and the docstring was describing a danger the construction had already removed.
+
+It stays, because deleting it would leave the property resting on an argument in a comment rather than on a check. What changed is the claim: the test now asserts the property, four attack settings wide, and a second test sets the lookahead to zero and requires the smoothing to lift the curve, so the property is shown to come from the lookahead rather than from luck.
+
+**The reduction was landing 16 frames late.** The required gain per sample comes from the oversampled peak, which is produced by a 257 tap linear phase filter. That filter delays its output by 128 upsampled samples, which is 16 input frames. Nothing removed the delay, so every peak was charged to the frame 16 later than the one it came from, and the gain arrived after the thing it was for.
+
+The measured cost: on a sine at a quarter of the sample rate, where every peak falls between samples, the limiter left the output at -0.90 dBTP against a -1.0 ceiling. It was not meeting the ceiling at all, and the only reason it looked fine on music is that music does not put its peaks between samples that reliably.
+
+With the delay removed, the envelope meets the ceiling to four decimal places on every signal built to break it: the quarter rate sine, a sweep to Nyquist, noise at four times the ceiling, and an isolated click. The constant trim that follows it has never had to act. It stays as a check rather than as a correction, and a test asserts the trim is zero: a trim that is not zero is a report that the envelope missed.
+
+### 32. The residual that came from three other tracks
+
+The low cut declared how far it moves the bands above it: 0.01 percentage points, measured at order 12 across three tracks and written into the module as a constant.
+
+On a file with a lot under 20 Hz it moves them 0.05. The filter removes part of the 20 to 60 band as well, which lowers the total the percentages are taken against, which raises every other band's share. How much depends on how much is down there, which is a property of the file and not of the filter.
+
+The constant is gone. The plan measures the spectrum before and after its own cut and reports what it actually moved on the file in hand. The control compares the number in the plan against a direct measurement of the same file, and a second control requires a cut at 300 Hz to measure differently, so the number is shown to be about the filter that ran.
+
+**A number measured on three files and written into the code is a quoted figure**, however carefully it was measured. It has the same standing as a figure quoted from memory: it describes the files it came from. The standing warning above says no target range is seeded from a quoted figure, and this was the same thing one layer down.
+
 ## Standing warning: where target numbers come from
 
 Measurements taken before 2026-08-26 in other sessions were mostly made with
