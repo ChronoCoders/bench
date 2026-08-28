@@ -25,8 +25,10 @@ def _expand_spectral(block: dict) -> dict:
     block["band_pct"] = {band_key(b["lo_hz"], b["hi_hz"]): b["pct"] for b in block["bands"]}
     every = block.get("uncertainty", {}).get("every_percentage")
     if every is not None:
-        spread = {name: every for name in block["rollups"]}
+        spread = {"every_percentage": every}
+        spread.update({name: every for name in block["rollups"]})
         spread.update({key: every for key in block["band_pct"]})
+        spread.update({key: every for key in block["outside_denominator_pct"]})
         block["uncertainty"] = spread
     return block
 
