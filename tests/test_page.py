@@ -219,3 +219,82 @@ def test_the_text_report_says_when_it_did_not_arrive():
     text = report.master_table(result)
     assert "Arrived: no" in text
     assert "off by -1.5" in text
+
+
+# Mastering from the page. The button is a second submit in the same form, so it
+# carries whatever the two selects are showing, and it posts rather than gets because
+# it writes files.
+
+def form():
+    return page.controls(["a.wav", "album/"], ["boom-bap"], "a.wav", "boom-bap")
+
+
+def test_the_page_offers_mastering_beside_measuring():
+    html = form()
+    assert ">Measure<" in html and ">Master<" in html
+
+
+def test_mastering_is_a_post_and_measuring_is_not():
+    html = form()
+    assert 'formmethod="post"' in html, "mastering writes files, so it must not be a get"
+    assert html.count('formmethod="post"') == 1, "only the mastering button posts"
+    assert 'method="get"' in html
+
+
+def test_both_buttons_carry_the_same_selection():
+    """One form, two submits. A separate form would need its own copy of the two
+    selects, and two lists of the same thing go out of step."""
+    html = form()
+    assert html.count("<form") == 1
+    assert html.count("<select") == 2
+
+
+def working(**over):
+    job = {"what": "album/", "target": "boom-bap", "running": True, "finished": 2,
+           "total": 9, "at": "Ledger.wav", "done": [], "failed": [], "failure": None,
+           "refused": None, "out_dir": r"C:\music\album (Mastered)"}
+    job.update(over)
+    return job
+
+
+def test_a_run_in_progress_says_where_it_is():
+    html = page.mastering_view(working())
+    assert "2 of 9 finished" in html
+    assert "Ledger.wav" in html
+    assert "album (Mastered)" in html
+
+
+def test_a_run_in_progress_reloads_itself_without_a_script():
+    html = page.document("Mastering", page.mastering_view(working()),
+                         again_in=page.WORKING_AGAIN_IN_S)
+    assert f'content="{page.WORKING_AGAIN_IN_S}"' in html
+    for forbidden in ("http://", "https://", "<script", "@import"):
+        assert forbidden not in html
+
+
+def test_a_finished_run_does_not_reload_itself():
+    html = page.document("Mastered", page.mastering_view(working(running=False)))
+    assert "http-equiv" not in html, "a finished page that reloads never stops working"
+
+
+def test_it_refuses_without_a_target_and_says_why():
+    html = page.mastering_view(working(running=False, refused="no target is chosen"))
+    assert "Not started" in html
+    assert "No target is chosen" in html, "the reason should start a sentence"
+
+
+def test_a_finished_run_counts_what_arrived():
+    done = [mastered_result([compare.INSIDE, compare.INSIDE]),
+            mastered_result([compare.BELOW, compare.INSIDE])]
+    done[1]["reached"]["arrived"] = False
+    html = page.mastering_view(working(running=False, done=done))
+    assert "2 files written, 1 of them inside the target" in html
+    assert html.count("<h2>Mastered against") == 2, "one before and after table per file"
+
+
+def test_a_file_it_would_not_master_is_named_with_the_reason():
+    html = page.mastering_view(working(
+        running=False, done=[mastered_result([compare.INSIDE, compare.INSIDE])],
+        failed=[{"name": "Skip.wav", "why": "that file already exists"}]))
+    assert "Not mastered" in html
+    assert "Skip.wav" in html and "That file already exists" in html

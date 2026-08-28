@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import re
-import sys
-import threading
 import urllib.request
 from pathlib import Path
 
@@ -12,7 +10,6 @@ import music
 import signals as sig
 from bench import folder, measurement, page, typeface
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 import serve
 
 FACE_URL = re.compile(r"url\('([^']+)'\)")
@@ -62,16 +59,10 @@ def test_the_key_appears_only_when_a_target_graded_the_table(tmp_path):
 
 
 @pytest.fixture
-def running(tmp_path):
-    x = music.limit(music.build("dense", 128.0, seconds=35.0, jitter=0.004))
-    sig.write(tmp_path / "one.wav", x)
-    httpd = serve.server_on(tmp_path, 0)
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-    thread.start()
-    yield f"http://127.0.0.1:{httpd.server_address[1]}"
-    httpd.shutdown()
-    httpd.server_close()
-    thread.join(timeout=5)
+def running(tmp_path, serving):
+    sig.write(tmp_path / "one.wav",
+              music.limit(music.build("dense", 128.0, seconds=35.0, jitter=0.004)))
+    return serving
 
 
 def test_the_server_hands_over_a_real_font(running):

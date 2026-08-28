@@ -6,6 +6,7 @@ Run it: python tools/serve.py [root folder] [port]
 from __future__ import annotations
 
 import sys
+import threading
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -13,11 +14,15 @@ from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from bench import compare, folder, measurement, page, typeface
+from bench import compare, folder, master, measurement, page, typeface
 
 TARGETS = Path(__file__).resolve().parent.parent / "targets"
 DEFAULT_PORT = 8731
 NONE = "none"
+
+MASTERED_SUFFIX = " (Mastered)"
+MASTERED_FOLDER = "Mastered"
+BODY_LIMIT = 4096
 
 
 DEPTH = 2
@@ -58,6 +63,75 @@ def choices(root: Path, depth: int = DEPTH) -> list[str]:
     return out
 
 
+def out_dir_for(path: Path) -> Path:
+    """Beside what was chosen, never inside it.
+
+    The mastering layer refuses to write into the folder its source is in. This is that
+    rule turned into a place rather than an error: a folder gets one next to it with the
+    same name, and a single file gets a Mastered folder beside the file.
+    """
+    if path.is_dir():
+        return path.parent / (path.name + MASTERED_SUFFIX)
+    return path.parent / MASTERED_FOLDER
+
+
+JOBS: dict[str, dict] = {}
+JOBS_LOCK = threading.Lock()
+
+
+def _refusal(root: Path, what: str, target_name: str) -> str | None:
+    if not what:
+        return "nothing is chosen to master"
+    if not target_name or target_name == NONE:
+        return ("no target is chosen, and every correction here is derived from the "
+                "distance to one")
+    path = (root / what.rstrip("/")).resolve()
+    if not str(path).startswith(str(root)):
+        return "that path is outside the folder being served"
+    if not path.exists():
+        return f"{what} is not there any more"
+    return None
+
+
+def start_master(root: Path, what: str, target_name: str) -> str:
+    """The id of the run to watch. One at a time: mastering uses the whole machine, and
+    two at once would be writing into the same folder under the same names."""
+    refused = _refusal(root, what, target_name)
+    with JOBS_LOCK:
+        if refused is None:
+            already = next((k for k, v in JOBS.items() if v["running"]), None)
+            if already is not None:
+                return already
+        job_id = str(len(JOBS) + 1)
+        job = {"what": what, "target": target_name, "running": refused is None,
+               "finished": 0, "total": 0, "at": None, "done": [], "failed": [],
+               "failure": None, "refused": refused, "out_dir": ""}
+        JOBS[job_id] = job
+    if refused is not None:
+        return job_id
+
+    path = (root / what.rstrip("/")).resolve()
+    out_dir = out_dir_for(path)
+    paths = audio_in(path) if path.is_dir() else [path]
+    job["out_dir"], job["total"] = str(out_dir), len(paths)
+
+    def watching(name, finished, total):
+        job["at"], job["finished"], job["total"] = name, finished, total
+
+    def work():
+        try:
+            chosen = compare.load(TARGETS / f"{target_name}.json")
+            job["done"], job["failed"] = master.run_each(paths, chosen, out_dir, watching)
+        except Exception:
+            job["failure"] = traceback.format_exc()
+        finally:
+            job["at"], job["finished"] = None, job["total"]
+            job["running"] = False
+
+    threading.Thread(target=work, daemon=True).start()
+    return job_id
+
+
 def targets() -> list[str]:
     return sorted(p.stem for p in TARGETS.glob("*.json")) if TARGETS.is_dir() else []
 
@@ -84,6 +158,18 @@ def render(root: Path, what: str, target_name: str) -> str:
     return page.document(path.name, head + page.file_view(one, result, chosen))
 
 
+def mastering(root: Path, job_id: str) -> tuple[str, int]:
+    job = JOBS.get(job_id)
+    if job is None:
+        head = page.controls(choices(root), targets(), "", NONE)
+        return page.document("Bench", head + "<h2>No such run</h2>"
+                             "<p>Nothing here is mastering that.</p>"), 404
+    head = page.controls(choices(root), targets(), job["what"], job["target"])
+    again = page.WORKING_AGAIN_IN_S if job["running"] else None
+    return page.document("Mastering" if job["running"] else "Mastered",
+                         head + page.mastering_view(job), again), 200
+
+
 def handler_for(root: Path):
     class Handler(BaseHTTPRequestHandler):
         def send_bytes(self, status: int, kind: str, body: bytes, cache: str | None = None):
@@ -105,6 +191,21 @@ def handler_for(root: Path):
                 return
             self.send_bytes(200, "font/woff2", path.read_bytes(), "max-age=86400")
 
+        def do_POST(self):
+            """Mastering writes files, so it is not a GET. The redirect afterwards is
+            what stops a reload of the result page starting the run a second time."""
+            if urlparse(self.path).path != page.MASTER_URL:
+                self.send_error(404)
+                return
+            length = min(int(self.headers.get("Content-Length") or 0), BODY_LIMIT)
+            form = parse_qs(self.rfile.read(length).decode("utf-8", "replace"))
+            job_id = start_master(root, form.get("what", [""])[0],
+                                  form.get("target", [NONE])[0])
+            self.send_response(303)
+            self.send_header("Location", f"{page.MASTER_URL}?job={job_id}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
         def do_GET(self):
             route = urlparse(self.path).path
             if route.startswith(typeface.FONT_URL + "/"):
@@ -113,6 +214,10 @@ def handler_for(root: Path):
             query = parse_qs(urlparse(self.path).query)
             what = query.get("what", [""])[0]
             target_name = query.get("target", [NONE])[0]
+            if route == page.MASTER_URL:
+                body, status = mastering(root, query.get("job", [""])[0])
+                self.send_bytes(status, "text/html; charset=utf-8", body.encode("utf-8"))
+                return
             try:
                 body, status = render(root, what, target_name), 200
             except compare.BandSetMismatch as why:

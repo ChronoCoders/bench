@@ -108,11 +108,15 @@ VERDICT_CLASS = {
 }
 
 
-def document(title: str, body: str) -> str:
+def document(title: str, body: str, again_in: int | None = None) -> str:
+    """`again_in` reloads the page after that many seconds. It is how a run in
+    progress shows what it has finished without a line of script on the page."""
+    reload = "" if again_in is None else (
+        f"<meta http-equiv=\"refresh\" content=\"{int(again_in)}\">")
     return (
         "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
         f"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-        f"<title>{escape(title)}</title>"
+        f"{reload}<title>{escape(title)}</title>"
         f"<style>{typeface.css()}</style><style>{STYLE}</style></head>"
         f"<body><main>{body}</main></body></html>\n"
     )
@@ -127,6 +131,9 @@ def number(value, decimals: int) -> str:
     if value is None:
         return "<span class=\"blank\">.</span>"
     return f"{value:.{decimals}f}"
+
+
+MASTER_URL = "/master"
 
 
 def controls(files: list[str], targets: list[str], chosen_file: str, chosen_target: str) -> str:
@@ -144,7 +151,9 @@ def controls(files: list[str], targets: list[str], chosen_file: str, chosen_targ
         "<div class=\"control\"><label for=\"target\">Target</label>"
         f"<select id=\"target\" name=\"target\">{options(['none'] + targets, chosen_target)}"
         "</select></div>"
-        "<button type=\"submit\">Measure</button></form>"
+        "<button type=\"submit\">Measure</button>"
+        f"<button type=\"submit\" formmethod=\"post\" formaction=\"{MASTER_URL}\">Master</button>"
+        "</form>"
     )
 
 
@@ -528,3 +537,40 @@ def master_view(result: dict) -> str:
         f"<h2>What it did</h2>{_plan_items(result['plan'])}"
         + arrived + checked
     )
+
+
+WORKING_AGAIN_IN_S = 3
+
+
+def mastering_view(job: dict) -> str:
+    """A run in progress or a run that finished, in one view. The page reloads itself
+    while it is working, so what is on screen is what has actually been written."""
+    if job.get("refused"):
+        return f"<h2>Not started</h2><p>{escape(sentence(job['refused']))}.</p>"
+
+    where = f"<p>Writing into {escape(str(job['out_dir']))}</p>"
+    if job["running"]:
+        at = job.get("at") or ""
+        of = f" of {job['total']}" if job["total"] else ""
+        return (
+            f"<h2>Mastering {escape(str(job['what']))}</h2>" + where +
+            f"<p>{job['finished']}{of} finished."
+            + (f" Working on {escape(at)}." if at else "") +
+            " This page keeps itself up to date.</p>"
+        )
+
+    if job.get("failure"):
+        return (f"<h2>Stopped</h2>{where}<p>The run stopped on an error.</p>"
+                f"<pre>{escape(job['failure'])}</pre>")
+
+    done, failed = job["done"], job["failed"]
+    arrived = sum(1 for one in done if one["reached"]["arrived"])
+    head = (f"<h2>Mastered {escape(str(job['what']))}</h2>{where}"
+            f"<p>{len(done)} file" + ("" if len(done) == 1 else "s") +
+            f" written, {arrived} of them inside the target on loudness and true peak.</p>")
+    refused = ""
+    if failed:
+        items = "".join(f"<li><b>{escape(one['name'])}</b> {escape(sentence(one['why']))}.</li>"
+                        for one in failed)
+        refused = (f"<h2>Not mastered</h2><ul class=\"reasons\">{items}</ul>")
+    return head + refused + "".join(master_view(one) for one in done)
