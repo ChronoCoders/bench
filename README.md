@@ -69,6 +69,11 @@ Colour is a warning, not decoration. A value inside its target gets no colour, b
 not being marked is the signal. Only what is outside is coloured, and on the line gets
 its own treatment because it is rare and it decides whether something ships.
 
+Two buttons. Measure reads, and Master writes, so Master is the only thing here that is
+a post rather than a link. It runs in the background and the page keeps itself up to
+date while it works, without a line of script on it, and shows the before and after
+table for every file when it finishes.
+
 ## measuring.md
 
 32 write ups of measurements that were wrong, or of claims about them that
@@ -98,7 +103,7 @@ Then open http://127.0.0.1:8731
 
 ## Tests
 
-280 tests. Every measurement claim has a control that can fail, and a negative control
+297 tests. Every measurement claim has a control that can fail, and a negative control
 proving the check has teeth. The rig raises a distinct error when an assertion accepts
 something it was supposed to reject.
 
@@ -107,8 +112,8 @@ python -m pytest
 python tools/mutate.py
 ```
 
-The mutation tool breaks the code 57 ways and checks the suite notices, working on a
-copy of the tree rather than the tree itself. All 57 are caught. It has found faults a
+The mutation tool breaks the code 62 ways and checks the suite notices, working on a
+copy of the tree rather than the tree itself. All 62 are caught. It has found faults a
 green suite cannot, and seven of the ledger entries came from it, including three tests
 that were passing for reasons unrelated to what they were written for.
 
@@ -132,6 +137,9 @@ The limiter is the exception, because an attack and a release are not implied by
 anything. They are searched for, and the winner is the setting whose output keeps every
 band's verdict against the target while moving the balance least. When the target bounds
 no bands there is no criterion, and it says so rather than choosing.
+
+Master on the page does this for whatever is selected, writing into a folder beside it.
+From the terminal:
 
 ```
 python tools/master_folder.py "path/to/folder" boom-bap "somewhere else"

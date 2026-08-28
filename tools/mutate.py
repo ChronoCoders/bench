@@ -38,6 +38,7 @@ LIKELY_CATCHER = {
     "typeface.py": "tests/test_typeface.py",
     "master.py": "tests/test_master.py",
     "limiter.py": "tests/test_limiter.py",
+    "serve.py": "tests/test_serve.py",
 }
 
 DECODE = Path("src/bench/decode.py")
@@ -51,6 +52,7 @@ COMPARE = Path("src/bench/compare.py")
 FOLDER = Path("src/bench/folder.py")
 PAGE = Path("src/bench/page.py")
 MASTER = Path("src/bench/master.py")
+SERVE = Path("tools/serve.py")
 LIMITER = Path("src/bench/limiter.py")
 
 READ_BODY = '''    data, rate = sf.read(str(path), dtype="float64", always_2d=True)
@@ -523,6 +525,41 @@ MUTANTS = (
         MASTER,
         "        moved = _cut_moved(measured, filtered)",
         "        moved = 0.01",
+    ),
+    Mutant(
+        "reach mastering with a link instead of a post",
+        "following a link would then write files, and a reload would write them again",
+        PAGE,
+        '        f"<button type=\\"submit\\" formmethod=\\"post\\" formaction=\\"{MASTER_URL}\\">Master</button>"',
+        '        f"<button type=\\"submit\\" formaction=\\"{MASTER_URL}\\">Master</button>"',
+    ),
+    Mutant(
+        "let the page that is working sit still",
+        "the run finishes and the page keeps showing the file it was on when it loaded",
+        PAGE,
+        "    reload = \"\" if again_in is None else (",
+        "    reload = \"\" if True else (",
+    ),
+    Mutant(
+        "count every file as having arrived",
+        "the summary then says a record reached its target when four tracks did not",
+        PAGE,
+        '    arrived = sum(1 for one in done if one["reached"]["arrived"])',
+        "    arrived = len(done)",
+    ),
+    Mutant(
+        "master into the folder the source is in",
+        "the mastering layer refuses that, so the page would offer a button that cannot work",
+        SERVE,
+        "        return path.parent / (path.name + MASTERED_SUFFIX)",
+        "        return path",
+    ),
+    Mutant(
+        "start a run with no target chosen",
+        "every correction is derived from the distance to one, so there is nothing to do",
+        SERVE,
+        "    if not target_name or target_name == NONE:",
+        "    if False:",
     ),
 )
 
