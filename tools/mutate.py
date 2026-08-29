@@ -548,6 +548,27 @@ MUTANTS = (
         "    arrived = len(done)",
     ),
     Mutant(
+        "open every block in a folder run",
+        "nine full blocks stacked is the page the collapse was for",
+        PAGE,
+        '    blocks = "".join((master_view if one_file else closed_view)(one) for one in done)',
+        '    blocks = "".join(master_view(one) for one in done)',
+    ),
+    Mutant(
+        "say every row arrived",
+        "the one file that missed its target reads the same as the eight that did not",
+        PAGE,
+        '    lands = "ARRIVED" if got.get("arrived") else "NOT ARRIVED"',
+        '    lands = "ARRIVED"',
+    ),
+    Mutant(
+        "leave the closed rows out of the page",
+        "a run you have to ask for the rest of is the pagination that was refused",
+        PAGE,
+        "        + master_view(result) + \"</details>\"",
+        '        + "</details>"',
+    ),
+    Mutant(
         "master into the folder the source is in",
         "the mastering layer refuses that, so the page would offer a button that cannot work",
         SERVE,

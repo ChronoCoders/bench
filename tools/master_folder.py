@@ -86,7 +86,8 @@ def main() -> int:
         where = out_dir / PAGE
         where.write_text(page.document(
             f"Mastered against {target['name']}",
-            "".join(page.master_view(one) for one in done)), encoding="utf-8")
+            "".join((page.master_view if len(done) == 1 else page.closed_view)(one)
+                    for one in done)), encoding="utf-8")
         print()
         print(f"Page: {where}")
     return 0 if done else 1

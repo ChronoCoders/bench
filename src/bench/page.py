@@ -99,6 +99,27 @@ table.rows tr.spread td:hover, table.rows tr.over td:hover { background: none; }
          font-style: normal; }
 .plot svg { display: block; width: 100%; height: auto; }
 .hold, .hold b, .hold .bv, .hold .bd { color: var(--dimmer); }
+/* A folder run is one block per file, and nine of them is a page nobody reads. Each
+   arrives closed, saying the name, whether it arrived, and the two numbers the plan
+   aims at. Details is the browser's own, so opening one needs no script. */
+details.one { margin-bottom: 10px; }
+details.one > summary { display: flex; align-items: baseline; gap: 16px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 9px;
+    padding: 12px 15px 11px; cursor: pointer; list-style: none; }
+details.one > summary::-webkit-details-marker { display: none; }
+details.one > summary::before { content: "+"; font-family: var(--mono); font-size: 12px;
+    color: var(--dim); width: 8px; }
+details.one[open] > summary::before { content: "-"; }
+details.one[open] > summary { margin-bottom: 12px; }
+details.one > summary:hover { border-color: var(--dimmer); }
+details.one > summary h3 { font-size: 12px; letter-spacing: 0.02em; color: var(--bone);
+    font-weight: 500; }
+details.one .lands { font-size: 9px; letter-spacing: 0.2em; color: var(--dim); }
+details.one .lands.out { color: var(--kill); }
+details.one .figs { margin-left: auto; font-family: var(--mono); font-size: 11px;
+    color: var(--dimmer); white-space: nowrap; }
+details.one .figs b { font-weight: 400; color: var(--bone); }
+details.one .figs span { margin-left: 16px; }
 """
 
 VERDICT_CLASS = {
@@ -722,6 +743,28 @@ def master_view(result: dict) -> str:
     )
 
 
+def closed_view(result: dict) -> str:
+    """The same block, behind a row that says enough to decide whether to open it.
+
+    The name, whether it arrived, and the two fields the plan aims at, read off the
+    output the way reached does rather than named again here.
+    """
+    name = Path(result["input"]).name
+    got = result.get("reached", {})
+    lands = "ARRIVED" if got.get("arrived") else "NOT ARRIVED"
+    klass = "lands" if got.get("arrived") else "lands out"
+    figs = "".join(
+        f"<span><b>{number(found.get('value'), fields.get(path).decimals)}</b> "
+        f"{escape(fields.get(path).unit)}</span>"
+        for path, found in got.get("fields", {}).items())
+    return (
+        "<details class=\"one\"><summary>"
+        f"<h3>{escape(name)}</h3><span class=\"{klass}\">{lands}</span>"
+        f"<span class=\"figs\">{figs}</span></summary>"
+        + master_view(result) + "</details>"
+    )
+
+
 def waiting_view(name: str) -> str:
     """The same shape with nothing in it yet, so the page does not jump when the run
     lands. Every card here is the size of the card that replaces it."""
@@ -785,7 +828,8 @@ def mastering_view(job: dict) -> str:
         refused = card("Not mastered",
                        f"<div class=\"inset\"><ul class=\"reasons\">{items}</ul></div>")
 
-    blocks = "".join(master_view(one) for one in done)
+    one_file = job["total"] == 1
+    blocks = "".join((master_view if one_file else closed_view)(one) for one in done)
     if job["running"]:
         blocks += waiting_view(job.get("at") or str(job["what"]))
     return head + refused + blocks

@@ -314,6 +314,70 @@ def test_a_finished_run_counts_what_arrived():
     assert html.count("<h3>SPECTRAL BALANCE</h3>") == 2
 
 
+# A folder run is one block per file. Nine of them open is a page that has to be
+# scrolled past to be read, so each arrives closed with enough on the row to decide.
+
+def run_of(n, arrived=()):
+    done = []
+    for i in range(n):
+        one = mastered_result([compare.INSIDE, compare.INSIDE])
+        one["input"] = f"C:/in/track{i}.wav"
+        if i in arrived:
+            one["reached"]["arrived"] = False
+        done.append(one)
+    return page.mastering_view(working(running=False, done=done, total=n))
+
+
+def test_a_folder_run_comes_back_closed():
+    html = run_of(9)
+    assert html.count("<details class=\"one\">") == 9
+    assert "<details class=\"one\" open" not in html and "<details open" not in html
+
+
+def test_the_whole_run_is_on_the_page():
+    """Closed is not left out. Every block is there to open, and nothing sends the
+    reader to a second page for the rest of it."""
+    html = run_of(9)
+    assert html.count("<h3>PLAN</h3>") == 9
+    assert html.count("<h3>SPECTRAL BALANCE</h3>") == 9
+    for i in range(9):
+        assert f"track{i}.wav" in html
+
+
+def test_a_closed_row_says_the_name_and_where_it_landed():
+    html = run_of(1 + 1)
+    row = html[html.index("<summary>"):html.index("</summary>")]
+    assert "track0.wav" in row
+    assert "ARRIVED" in row
+    assert ">-10.5</b> LUFS" in row
+    assert ">-1.2</b> dBTP" in row
+
+
+def test_the_row_reads_the_output_rather_than_naming_the_numbers_again():
+    """It shows what reached measured. A row that carried its own copy would go on
+    saying the old number after the measurement changed."""
+    done = [mastered_result([compare.INSIDE, compare.INSIDE])]
+    done[0]["reached"]["fields"]["loudness.integrated_lufs"]["value"] = -8.4
+    html = page.mastering_view(working(running=False, done=done, total=2))
+    assert ">-8.4</b> LUFS" in html[:html.index("</summary>")]
+
+
+def test_only_a_row_that_did_not_arrive_is_coloured():
+    html = run_of(2, arrived=(1,))
+    rows = re.findall(r"<summary>.*?</summary>", html, re.S)
+    assert len(rows) == 2
+    assert "ARRIVED" in rows[0] and "lands out" not in rows[0]
+    assert "NOT ARRIVED" in rows[1] and "lands out" in rows[1]
+
+
+def test_a_single_file_run_is_not_collapsed():
+    """There is nothing to scroll past, and a lone closed row hides the whole result."""
+    html = page.mastering_view(working(
+        running=False, total=1, done=[mastered_result([compare.INSIDE, compare.INSIDE])]))
+    assert "<details" not in html
+    assert "<h3>PLAN</h3>" in html
+
+
 def test_a_file_it_would_not_master_is_named_with_the_reason():
     html = page.mastering_view(working(
         running=False, done=[mastered_result([compare.INSIDE, compare.INSIDE])],
