@@ -353,6 +353,35 @@ def test_a_target_that_bounds_bands_does_search(tmp_path):
     assert len(found["tried"]) == len(master.ATTACKS_MS) * len(master.RELEASES_MS)
 
 
+def test_it_says_when_the_winner_sits_on_the_edge_of_the_grid(mastered):
+    """A winner on the boundary of the grid was chosen by the grid rather than by the
+    material, so the result says so. It also has to not say so otherwise."""
+    found = mastered["limiter_search"]
+    chosen = found["chosen"]
+    on_edge = (chosen["attack_ms"] in (min(master.ATTACKS_MS), max(master.ATTACKS_MS))
+               or chosen["release_ms"] in (min(master.RELEASES_MS), max(master.RELEASES_MS)))
+    assert ("at_search_edge" in found) == on_edge, (
+        f"{chosen['attack_ms']} ms and {chosen['release_ms']} ms against "
+        f"{master.ATTACKS_MS} and {master.RELEASES_MS}"
+    )
+
+
+def test_a_grid_of_one_setting_is_all_edge(tmp_path, monkeypatch):
+    """The control on the one above, which on a given file exercises whichever branch
+    that file happens to land in."""
+    monkeypatch.setattr(master, "ATTACKS_MS", (2.0,))
+    monkeypatch.setattr(master, "RELEASES_MS", (60.0,))
+    path = source(tmp_path)
+    before = measurement.of_file(path)
+    audio = decode(path)
+    target = target_around(before)
+    found = master.search_limiter(audio, audio.samples * 4.0,
+                                  master.step_ceiling(target, before), target, before)
+    assert len(found["tried"]) == 1
+    assert "attack at 2.0 ms" in found["at_search_edge"]
+    assert "release at 60.0 ms" in found["at_search_edge"]
+
+
 # Fault four. A prediction checked against the instrument that did not make it.
 
 def _after(primary, crosscheck, unit=0.05):
@@ -375,7 +404,7 @@ def test_a_prediction_is_checked_against_the_instrument_that_made_it():
 def test_checking_it_against_the_other_one_would_not_hold():
     held = master._held(_predicting("arithmetic on the primary instrument"),
                         _after(primary=-1.0, crosscheck=-1.25))
-    assert held["against"] == "the primary"
+    assert held["against"] == "the primary instrument"
     assert not held["fields"]["true_peak_dbtp"]["held"], (
         "the same prediction has to fail against the other instrument, or this pair "
         "is not measuring which instrument gets read"

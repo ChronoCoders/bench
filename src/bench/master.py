@@ -39,8 +39,20 @@ CUT_ORDER = 12
 
 # The space searched, not values chosen. The result names the winner and says when it
 # sits on an edge of this grid, because a peak at the edge of a search is a truncation.
-ATTACKS_MS = (0.5, 2.0, 5.0, 10.0)
-RELEASES_MS = (20.0, 60.0, 150.0)
+#
+# Widened after every winner on a nine track record came back on an edge. A grid whose
+# answer is always its own boundary is reporting the boundary. Spaced by roughly three,
+# because the thing being chosen is a time constant and a time constant that differs by
+# a tenth of itself does not differ.
+#
+# The ends are where the mechanism stops meaning anything rather than round numbers.
+# 0.1 ms is four samples at 44.1k, which is as short as a window can be and still be a
+# window. 30 ms is longer than the gap between beats at any tempo this is for, so a
+# reduction taken at one hit has not recovered before the next. 3 ms of release is
+# shorter than the attack at the other end of the grid, and 1000 ms holds a reduction
+# across a whole bar.
+ATTACKS_MS = (0.1, 0.3, 1.0, 3.0, 10.0, 30.0)
+RELEASES_MS = (3.0, 10.0, 30.0, 100.0, 300.0, 1000.0)
 
 # An uncertainty is half the step the value is reported in, so aiming a single
 # uncertainty below a ceiling lands on a reported value that still touches it. Two
@@ -67,6 +79,9 @@ def clearance(field: str, unit: float) -> float:
     return CLEARANCE * unit + loudness.TOLERANCE[CROSSCHECK_UNIT[field]]
 
 FULL_SCALE_DBTP = 0.0
+# Columns in the picture of the file. A drawing, not a measurement: nothing reads it
+# back and no verdict rests on it.
+WAVEFORM_COLUMNS = 1000
 SUBTYPE = "PCM_24"
 
 
@@ -210,6 +225,12 @@ def search_limiter(audio: Audio, pushed: np.ndarray, ceiling_aim: float,
     accepted = [one for one in tried if one["accepted"]]
     best = min(accepted, key=lambda one: one["largest_band_move_pct"]) if accepted else None
     out = {"tried": tried, "accepted": len(accepted), "chosen": best, "correction_db": 0.0}
+    if accepted:
+        # The spread the winner was picked out of. A choice made across 0.04 points is
+        # a choice the instrument can barely see, and the reader should be able to tell
+        # that from a choice made across half a point.
+        moved = [one["largest_band_move_pct"] for one in accepted]
+        out["moved_least"], out["moved_most"] = round(min(moved), 4), round(max(moved), 4)
 
     # The limiter takes loudness the gain arithmetic could not see, and lifting the gain
     # makes it take a little more. Correct by measuring, and stop when the measurement
@@ -393,7 +414,9 @@ def plan(measured: dict, target: dict, filtered: dict | None = None,
                 "attack_ms": chosen["attack_ms"],
                 "release_ms": chosen["release_ms"],
                 "chosen_from": f"{limiting['accepted']} of {len(limiting['tried'])} settings "
-                               "kept every band's verdict, and this one moved the balance least",
+                               "kept every band's verdict, the balance moved between "
+                               f"{limiting['moved_least']} and {limiting['moved_most']} "
+                               "points across them, and this one moved it least",
                 "largest_band_move_pct": chosen["largest_band_move_pct"],
                 "gain_reduction": chosen["gain_reduction"],
                 "balance_moved_more_than_measurement_resolution":
@@ -486,7 +509,8 @@ def run(path: str | Path, target: dict, out_dir: str | Path) -> dict:
     built = plan(before, target, filtered, limiting)
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    sf.write(str(destination), render(audio, built).T, audio.sample_rate_hz, subtype=SUBTYPE)
+    made = render(audio, built)
+    sf.write(str(destination), made.T, audio.sample_rate_hz, subtype=SUBTYPE)
 
     after = measurement.of_file(destination)
     graded = compare.against(after, target)
@@ -496,8 +520,9 @@ def run(path: str | Path, target: dict, out_dir: str | Path) -> dict:
         "output": str(destination),
         "plan": built,
         "limiter_search": limiting,
-        "before": {"measurement": before, "comparison": compare.against(before, target)},
-        "after": {"measurement": after, "comparison": graded},
+        "before": {"measurement": before, "comparison": compare.against(before, target),
+                   "waveform": waveform(audio.samples)},
+        "after": {"measurement": after, "comparison": graded, "waveform": waveform(made)},
         "prediction": _held(built, after),
         "reached": reached(after, graded),
     }
@@ -518,6 +543,16 @@ def second_instrument(samples: np.ndarray, rate: int) -> dict:
         "integrated_lufs": None if reached is None else round(reached.lufs, 4),
         "true_peak_dbtp": bs1770.true_peak_dbtp(samples),
     }
+
+
+def waveform(samples: np.ndarray, columns: int = WAVEFORM_COLUMNS) -> list[float]:
+    """The largest magnitude in each column, as a fraction of full scale."""
+    loud = np.max(np.abs(np.atleast_2d(np.asarray(samples, dtype=np.float64))), axis=0)
+    if loud.size == 0:
+        return []
+    edges = np.linspace(0, loud.size, min(columns, loud.size) + 1).astype(int)
+    return [round(float(loud[a:b].max()), 4)
+            for a, b in zip(edges[:-1], edges[1:]) if b > a]
 
 
 def run_each(paths, target: dict, out_dir, watching=None) -> tuple[list[dict], list[dict]]:
@@ -577,7 +612,10 @@ def _held(built: dict, after: dict) -> dict:
     # Checking a numpy figure against ffmpeg measures the gap between the two, which
     # the bench already reports, and calls it a failed plan.
     second = predicted.get("predicted_by", "").startswith("the second instrument")
-    out = {"checked": True, "against": "the second instrument" if second else "the primary",
+    # A whole phrase, not half of one. Two places print this and one of them was
+    # adding the noun back, which read as the second instrument instrument.
+    out = {"checked": True,
+           "against": "the second instrument" if second else "the primary instrument",
            "fields": {}}
     for field, name in ((LOUDNESS_FIELD, "integrated_lufs"), (PEAK_FIELD, "true_peak_dbtp")):
         got = compare.dig(after, f"loudness.crosscheck.{name}") if second else None
