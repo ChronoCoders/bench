@@ -162,32 +162,44 @@ def mastered_result(after_verdicts, before_verdicts=(compare.BELOW, compare.INSI
     }
 
 
+def marks(html):
+    return re.findall(r'class="[^"]*?\b(line|out)\b[^"]*?"', html)
+
+
 def test_a_run_that_was_inside_all_along_carries_no_colour():
     html = page.master_view(mastered_result([compare.INSIDE, compare.INSIDE],
                                             [compare.INSIDE, compare.INSIDE]))
-    marked = re.findall(r'class="(line|out)">', html)
-    assert marked == [], "nothing was outside at either end, so nothing should be marked"
+    assert marks(html) == [], "nothing was outside at either end, so nothing is marked"
 
 
 def test_only_the_side_that_was_outside_is_marked():
-    """One field below before and inside after. Two cells carry the value and the
-    verdict, so the before side is marked twice and the after side not at all."""
-    html = page.master_view(mastered_result([compare.INSIDE, compare.INSIDE]))
-    marked = re.findall(r'class="(line|out)">', html)
-    assert marked == ["out", "out"], marked
+    """One field below before and inside after. The source cell carries the mark and
+    nothing on the master side does."""
+    assert marks(page.master_view(mastered_result([compare.INSIDE, compare.INSIDE]))) == ["out"]
 
 
 def test_it_marks_a_field_that_landed_outside():
-    """The control on the one above. A view that never marks the after side is not a
+    """The control on the one above. A view that never marks the master side is not a
     view that marks what is outside."""
-    html = page.master_view(mastered_result([compare.BELOW, compare.ON_THE_LINE]))
-    marked = re.findall(r'class="(line|out)">', html)
-    assert marked.count("out") == 4 and marked.count("line") == 2, marked
+    marked = marks(page.master_view(mastered_result([compare.BELOW, compare.ON_THE_LINE])))
+    assert marked.count("out") == 3 and marked.count("line") == 2, marked
 
 
-def test_the_before_column_keeps_the_verdict_the_file_started_with():
-    html = page.master_view(mastered_result([compare.INSIDE, compare.INSIDE]))
-    assert ">below<" in html, "the before column has to still say the file was below"
+def test_how_far_off_is_a_number_and_not_only_a_colour():
+    """Inside leaves the cell empty, on the line reads zero, and outside reads how far.
+    Somebody who cannot tell the two colours apart can still tell those three apart."""
+    inside = page.master_view(mastered_result([compare.INSIDE, compare.INSIDE],
+                                              [compare.INSIDE, compare.INSIDE]))
+    assert 'class="dev "></td>' in inside
+
+    on_line = mastered_result([compare.ON_THE_LINE, compare.INSIDE],
+                              [compare.INSIDE, compare.INSIDE])
+    on_line["after"]["comparison"]["rows"][0]["deviation"] = 0.0
+    assert 'class="dev line">0.0<' in page.master_view(on_line)
+
+    out = page.master_view(mastered_result([compare.BELOW, compare.INSIDE],
+                                           [compare.INSIDE, compare.INSIDE]))
+    assert 'class="dev out">-2.8' in out
 
 
 def test_the_view_says_whether_it_arrived():
@@ -289,7 +301,8 @@ def test_a_finished_run_counts_what_arrived():
     done[1]["reached"]["arrived"] = False
     html = page.mastering_view(working(running=False, done=done))
     assert "2 files written, 1 of them inside the target" in html
-    assert html.count("<h2>Mastered against") == 2, "one before and after table per file"
+    assert html.count("<h3>Plan</h3>") == 2, "one block per file"
+    assert html.count("<h3>Spectral balance</h3>") == 2
 
 
 def test_a_file_it_would_not_master_is_named_with_the_reason():
@@ -298,3 +311,15 @@ def test_a_file_it_would_not_master_is_named_with_the_reason():
         failed=[{"name": "Skip.wav", "why": "that file already exists"}]))
     assert "Not mastered" in html
     assert "Skip.wav" in html and "That file already exists" in html
+
+
+def test_the_instrument_is_named_once():
+    """Two places print this phrase and one of them used to add the noun back, which
+    read as the second instrument instrument."""
+    for named in ("the second instrument", "the primary instrument"):
+        result = mastered_result([compare.INSIDE, compare.INSIDE])
+        result["prediction"]["against"] = named
+        html, text = page.master_view(result), report.master_table(result)
+        assert "instrument instrument" not in html
+        assert "instrument instrument" not in text
+        assert named in html and named in text

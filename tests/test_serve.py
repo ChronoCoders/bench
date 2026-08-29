@@ -78,6 +78,18 @@ def test_mastering_is_offered_on_the_page(serving):
     assert ">Master<" in html and ">Measure<" in html
 
 
+def test_the_page_says_where_mastering_would_write(album, serving):
+    """Before the button is pressed, not after. A run that writes somewhere unexpected
+    is one that had nowhere to say so."""
+    _, html = get(f"{serving}/?what=album/&target={TARGET}")
+    assert "album" + serve.MASTERED_SUFFIX in html
+
+
+def test_it_says_nothing_when_there_is_nothing_chosen(serving):
+    _, html = get(f"{serving}/")
+    assert "Output" not in html
+
+
 def test_a_get_never_masters_anything(album, serving, tmp_path):
     """The button posts. Nothing that writes a file can be reachable by following a
     link, which is what a get is."""
@@ -93,7 +105,7 @@ def test_it_masters_a_folder_and_shows_the_before_and_after(album, serving, tmp_
     status, html = until_finished(serving, where)
     assert status == 200
     assert "2 files written" in html
-    assert html.count("<h2>Mastered against") == 2, "one before and after table per file"
+    assert html.count("<h3>Plan</h3>") == 2, "one block per file"
 
     out = tmp_path / ("album" + serve.MASTERED_SUFFIX)
     assert sorted(p.name for p in out.iterdir()) == ["one.wav", "two.wav"]

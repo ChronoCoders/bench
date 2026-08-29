@@ -136,8 +136,18 @@ def targets() -> list[str]:
     return sorted(p.stem for p in TARGETS.glob("*.json")) if TARGETS.is_dir() else []
 
 
+def writes_into(root: Path, what: str) -> str:
+    """Where Master would put it, shown before the button is pressed rather than after."""
+    if not what:
+        return ""
+    path = (root / what.rstrip("/")).resolve()
+    if not str(path).startswith(str(root)) or not path.exists():
+        return ""
+    return str(out_dir_for(path))
+
+
 def render(root: Path, what: str, target_name: str) -> str:
-    head = page.controls(choices(root), targets(), what, target_name)
+    head = page.controls(choices(root), targets(), what, target_name, writes_into(root, what))
     if not what:
         return page.document("Bench", head + "<p>Choose a file or a folder, then measure.</p>")
 
@@ -164,7 +174,8 @@ def mastering(root: Path, job_id: str) -> tuple[str, int]:
         head = page.controls(choices(root), targets(), "", NONE)
         return page.document("Bench", head + "<h2>No such run</h2>"
                              "<p>Nothing here is mastering that.</p>"), 404
-    head = page.controls(choices(root), targets(), job["what"], job["target"])
+    head = page.controls(choices(root), targets(), job["what"], job["target"],
+                         job["out_dir"])
     again = page.WORKING_AGAIN_IN_S if job["running"] else None
     return page.document("Mastering" if job["running"] else "Mastered",
                          head + page.mastering_view(job), again), 200
