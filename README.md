@@ -70,9 +70,15 @@ not being marked is the signal. Only what is outside is coloured, and on the lin
 its own treatment because it is rare and it decides whether something ships.
 
 Two buttons. Measure reads, and Master writes, so Master is the only thing here that is
-a post rather than a link. It runs in the background and the page keeps itself up to
-date while it works, without a line of script on it, and shows the before and after
-table for every file when it finishes.
+a post rather than a link, and the bar says where it would write before you press it. It
+runs in the background and the page keeps itself up to date while it works, without a
+line of script on it.
+
+A mastered file reads as one block: the plan across the top, the source and the master
+drawn one above the other at the same scale, and the field table beside the spectral
+balance. While a run is working that block is already on the page with nothing in it,
+at the size it will be, so nothing moves when the numbers land. A folder gets one block
+per file.
 
 ## measuring.md
 
@@ -103,7 +109,7 @@ Then open http://127.0.0.1:8731
 
 ## Tests
 
-297 tests. Every measurement claim has a control that can fail, and a negative control
+302 tests. Every measurement claim has a control that can fail, and a negative control
 proving the check has teeth. The rig raises a distinct error when an assertion accepts
 something it was supposed to reject.
 
@@ -134,9 +140,15 @@ a ceiling from the target's own limit. What the measurement does not imply is no
 applied, and the plan says which corrections were refused and why.
 
 The limiter is the exception, because an attack and a release are not implied by
-anything. They are searched for, and the winner is the setting whose output keeps every
-band's verdict against the target while moving the balance least. When the target bounds
-no bands there is no criterion, and it says so rather than choosing.
+anything. They are searched for over 36 settings, and the winner is the one whose output
+keeps every band's verdict against the target while moving the balance least. The plan
+says how wide the spread was that it chose out of, and says so when the winner sits on
+the edge of the grid, because a peak at the edge of a search is a truncation.
+
+That objective has a fault worth knowing about before trusting the setting it picks.
+Entry 34 has the measured surface: a limiter with an infinitely long release is a
+constant gain, and a constant gain moves no band at all, so the thing being minimised
+has its best value where the limiter does nothing dynamic.
 
 Master on the page does this for whatever is selected, writing into a folder beside it.
 From the terminal:

@@ -786,6 +786,38 @@ There is a second lesson underneath. Two safeguards that overlap look like defen
 
 All three passed a green suite, and all three were written the same day as the code they cover.
 
+### 34. The objective whose best answer is to do nothing
+
+Every limiter setting the search picked on a nine track record came back on the edge of the grid it was picked from. A grid whose answer is always its own boundary is reporting the boundary, so the grid was widened: four attacks became six, spanning 0.1 to 30 ms, and three releases became six, spanning 3 to 1000 ms.
+
+The winners still came back on the edges. Collateral took 0.1 ms and 100 ms, which is one edge and one interior. Acquisition took 0.1 and 1000, both edges at the extremes. Settled took 30 and 1000, both edges at the other extreme. So the attack is not simply always the fastest: two files took the shortest offered and one took the longest.
+
+The whole surface, measured on Settled, is what explains it. Band movement in percentage points, `x` where the setting changed a verdict against the target:
+
+```
+attack\release      3       10       30      100      300     1000
+         0.1     0.51     0.52     0.56     0.59     0.54     0.29
+         0.3     0.53     0.52     0.56        x     0.54     0.29
+           1     0.59     0.57     0.60        x     0.56     0.30
+           3     0.57     0.60        x        x     0.61     0.29
+          10        x        x        x        x     0.61     0.27
+          30        x        x        x        x     0.62     0.26
+```
+
+Two things are in that table. The release decides almost everything: every column under 1000 ms sits near 0.55 and the 1000 ms column sits near 0.28. The attack decides almost nothing: down that last column, six settings spanning a factor of three hundred move the balance by 0.04 in total, which is eight of the 0.005 steps a percentage is reported in. The attack's real effect is on which settings are allowed at all, not on which is best.
+
+**The reason the release always wins at the maximum is that the objective is degenerate.** The search keeps every setting whose output leaves every band's verdict where it was, and among those it takes the one that moved the balance least. A limiter with an infinitely long release never lets the gain back up, which is a constant gain, and a constant gain moves no band at all. So "moves the balance least" is minimised by the setting that does the least limiting, and its true optimum is not to limit. Bounded by a grid that looks like a choice. Unbounded, its answer is a static gain cut, which is not an answer to the question being asked.
+
+Widening the release further would move the winner to whatever new maximum it was given, for as long as anyone kept widening it.
+
+**What was tried and did not ship.** The obvious repair is to make the objective the thing actually wanted, the most loudness reached, and leave the verdicts as the constraint that stops it being reached by damage. That is well posed and its optimum is interior. On the one file where the target is reachable and the outcome could be checked, it landed 0.048 LU short of the target where the old objective landed inside. The reason is that the loudness a setting reaches before the gain correction is not the loudness it reaches after: the correction lifts the gain until the measurement clears the floor, and the setting that starts loudest can be the one with least room left before a verdict changes. Measuring the loudness after correction would mean running the correction loop for every setting in the grid, which is thirty six times the work.
+
+So it stays as it was, on one file's evidence against it, which is exactly the standard entry 30 was written about. The change is not being made on one file's evidence for it either.
+
+**What ships.** The wider grid, because the release genuinely spans it, and the plan now reports the spread the winner was chosen out of. A choice made across 0.04 points and a choice made across half a point read identically when only the winner is printed, and they are not the same kind of choice.
+
+The lesson is about objectives rather than controls. Entry 27 was a criterion no setting could fail, which chose nothing and said so loudly. This is quieter: a criterion every setting can fail, ranked by a quantity whose best value is at a setting nobody would want. **A grid can hide a degenerate objective by never offering it what it really wants.**
+
 ## Standing warning: where target numbers come from
 
 Measurements taken before 2026-08-26 in other sessions were mostly made with
