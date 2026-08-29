@@ -367,3 +367,31 @@ def test_no_view_keeps_a_heading_of_its_own(tmp_path):
         assert "<h1" not in html, name
         assert 'class="head"' not in html, name
         assert "<h1" not in html, f"{name} keeps a heading of its own"
+
+def test_the_dropdown_list_is_drawn_from_the_palette():
+    """The list a select drops down is the browser's, not this page's. Left alone it
+    comes back with a bright blue selected row that appears nowhere else here. This
+    checks the declarations exist and names the tokens; it cannot check appearance, and
+    the picture for that has to be taken with the list open."""
+    css = page.STYLE
+    assert "color-scheme: dark" in css
+    assert "option { background: var(--panel); color: var(--bone); }" in css
+    assert "option:checked, option:hover" in css
+    assert "var(--panel-hi)" in css.split("option:checked, option:hover {")[1].split("}")[0]
+
+
+def test_the_focus_ring_is_the_accent_in_the_tokens():
+    ring = page.STYLE.split("select:focus,")[1].split("}")[0]
+    assert "var(--acc)" in ring
+    assert "outline" in ring and "border-color" in ring
+
+
+def test_no_colour_on_the_page_is_written_out_by_hand():
+    """The control on both of those. A hex that is not in the reference palette is a
+    colour somebody typed rather than a token, which is how a page grows a second
+    palette."""
+    import re
+    known = {m.lower() for m in re.findall(r"#[0-9A-Fa-f]{6}", page.DESIGN)}
+    known |= {"#2a2e36", "#6a7280", "#0a0c10"}
+    theirs = {m.lower() for m in re.findall(r"#[0-9A-Fa-f]{6}", page.STYLE)}
+    assert theirs <= known, sorted(theirs - known)

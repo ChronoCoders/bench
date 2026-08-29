@@ -9,7 +9,7 @@ and a prediction checked against the instrument that did not make it.
 from __future__ import annotations
 
 import hashlib
-from datetime import date
+import inspect
 from dataclasses import replace
 from pathlib import Path
 
@@ -533,9 +533,20 @@ def test_the_master_carries_what_it_was_told(tmp_path):
     for name, value in said.items():
         assert got[name] == value
     assert got["title"] == "Ledger", "the title is the file's own name"
-    assert got["date"] == str(date.today().year)
-    assert got["copyright"] == f"{date.today().year} {master.HOLDER}"
+    assert got["date"] == master.YEAR
+    assert got["copyright"] == f"{master.YEAR} {master.HOLDER}"
     assert got["software"].startswith(master.METHOD)
+
+
+def test_the_year_is_not_read_off_the_clock():
+    """It is the year the record was made. Off the clock it would say 2027 in January
+    for a remaster of a 2026 record, which is a date about the run, not about the work."""
+    assert master.YEAR == "2026"
+    assert master.tags_for("Ledger.wav")["date"] == master.YEAR
+    source = inspect.getsource(master)
+    assert "date.today" not in source and "datetime" not in source, (
+        "something in here reads the clock, so the year can change without a decision"
+    )
 
 
 def test_a_field_left_blank_is_left_out(tmp_path):

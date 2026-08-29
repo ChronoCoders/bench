@@ -555,6 +555,14 @@ MUTANTS = (
         "        return path",
     ),
     Mutant(
+        "take the year off the clock",
+        "a remaster in January would then say 2027 on a record made in 2026",
+        MASTER,
+        '    out = {"title": Path(source).stem, "date": YEAR,',
+        '    import datetime\n    out = {"title": Path(source).stem, '
+        '"date": str(datetime.date.today().year),',
+    ),
+    Mutant(
         "write an empty tag rather than leaving the field out",
         "an empty tag is a claim that the field is empty, not that it was not given",
         MASTER,

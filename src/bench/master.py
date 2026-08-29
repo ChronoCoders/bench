@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, replace
-from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -88,6 +87,11 @@ FULL_SCALE_DBTP = 0.0
 TYPED = ("artist", "album", "genre")
 DERIVED = ("title", "date", "copyright", "software")
 HOLDER = "Altug Tatlisu"
+# The year the record was made, not the year it was last processed. Read off the clock
+# it would say 2027 in January for a remaster of a 2026 record, which is a date about
+# the run rather than about the work. Declared, so changing it is a decision somebody
+# makes rather than a thing that happens while nobody is looking.
+YEAR = "2026"
 # Columns in the picture of the file. A drawing, not a measurement: nothing reads it
 # back and no verdict rests on it.
 WAVEFORM_COLUMNS = 1000
@@ -570,9 +574,8 @@ def tags_for(source, said: dict | None = None) -> dict:
     An empty field is left out rather than written empty. An empty tag is a claim that
     the field is empty, and this bench does not make claims it was not given.
     """
-    year = str(date.today().year)
-    out = {"title": Path(source).stem, "date": year,
-           "copyright": f"{year} {HOLDER}", "software": METHOD}
+    out = {"title": Path(source).stem, "date": YEAR,
+           "copyright": f"{YEAR} {HOLDER}", "software": METHOD}
     for name in TYPED:
         value = str((said or {}).get(name, "")).strip()
         if value:

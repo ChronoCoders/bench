@@ -30,6 +30,17 @@ p { margin-bottom: 10px; color: var(--dim); max-width: 62em; }
              border-radius: 6px; color: var(--text); font: inherit; font-size: 13px;
              padding: 8px 11px; white-space: nowrap; overflow: hidden;
              text-overflow: ellipsis; max-width: 320px; }
+/* The list a select drops down is drawn by the browser, not by this page, and left
+   alone it comes back with a bright blue selected row and a white ground that appear
+   nowhere else here. color-scheme tells the browser which end of the palette this page
+   is at; the rest names the colours it should use. The inset shadow is how a checked
+   row is coloured at all: background on option:checked is overridden by the system
+   highlight, and a shadow spread across the row is not. */
+:root { color-scheme: dark; }
+option { background: var(--panel); color: var(--bone); }
+option:checked, option:hover { box-shadow: 0 0 10px 100px var(--panel-hi) inset; }
+select:focus, select:focus-visible, .fld input:focus, .fld input:focus-visible {
+    outline: 2px solid var(--acc); outline-offset: 2px; border-color: var(--acc); }
 :focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 .wrap { overflow-x: auto; overflow-y: hidden; }
 .card .wrap, .card .inset { padding: 6px 15px 13px; }
