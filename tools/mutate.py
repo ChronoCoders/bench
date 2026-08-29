@@ -555,6 +555,20 @@ MUTANTS = (
         "        return path",
     ),
     Mutant(
+        "hold every measurement this run makes",
+        "a process that runs all day and forgets nothing is a memory ceiling",
+        SERVE,
+        "    while len(MEASURED) > KEEP_MEASURED:\n        MEASURED.popitem(last=False)",
+        "    pass",
+    ),
+    Mutant(
+        "drop the oldest run rather than the oldest finished one",
+        "something is writing files under a run that is still going",
+        SERVE,
+        '    finished = [k for k, v in JOBS.items() if not v["running"]]',
+        "    finished = list(JOBS)",
+    ),
+    Mutant(
         "take the year off the clock",
         "a remaster in January would then say 2027 on a record made in 2026",
         MASTER,

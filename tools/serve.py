@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import sys
 import threading
+from collections import OrderedDict
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -109,7 +110,18 @@ SAID: dict[str, str] = {}
 # changed is a different folder. It lives and dies with the process and nothing is
 # written down, because a measurement that outlives the thing it measured is entry 2's
 # fault in a new coat.
-MEASURED: dict[tuple, object] = {}
+#
+# Bounded, and the least recently used goes first. A bench is looked at one folder at a
+# time and now and then compared against the one before it, so a few is what actually
+# gets used, and an unbounded one in a process that runs all day is a memory ceiling
+# with a longer fuse. It would rather forget than grow.
+KEEP_MEASURED = 4
+MEASURED: "OrderedDict[tuple, object]" = OrderedDict()
+
+# The same for runs. A finished one is a page somebody may still have open, so the last
+# few stay reachable, but a run that is still going is never dropped: something is
+# writing files under it.
+KEEP_JOBS = 6
 
 
 def stamp(path: Path) -> tuple:
@@ -122,11 +134,24 @@ def stamp(path: Path) -> tuple:
 
 def remember(path: Path, target_name: str, make):
     key = (stamp(path), target_name)
-    if key not in MEASURED:
-        MEASURED[key] = make()
+    if key in MEASURED:
+        MEASURED.move_to_end(key)
+        return MEASURED[key]
+    MEASURED[key] = make()
+    while len(MEASURED) > KEEP_MEASURED:
+        MEASURED.popitem(last=False)
     return MEASURED[key]
 
+
+def forget_old_jobs() -> None:
+    """Oldest finished first. A run that is still going owns files being written."""
+    finished = [k for k, v in JOBS.items() if not v["running"]]
+    while len(JOBS) > KEEP_JOBS and finished:
+        JOBS.pop(finished.pop(0), None)
+
 JOBS: dict[str, dict] = {}
+# Counted rather than sized, so a dropped run never lends its number to a later one.
+NEXT_JOB = [1]
 JOBS_LOCK = threading.Lock()
 
 
@@ -169,12 +194,14 @@ def start_master(root: Path, what: str, target_name: str, said: dict | None = No
             already = next((k for k, v in JOBS.items() if v["running"]), None)
             if already is not None:
                 return already
-        job_id = str(len(JOBS) + 1)
+        job_id = str(NEXT_JOB[0])
+        NEXT_JOB[0] += 1
         job = {"what": what, "target": target_name, "said": dict(said or {}),
                "running": refused is None, "finished": 0, "total": 0, "at": None,
                "done": [], "failed": [], "failure": None, "refused": refused,
                "out_dir": ""}
         JOBS[job_id] = job
+        forget_old_jobs()
     if refused is not None:
         return job_id
 

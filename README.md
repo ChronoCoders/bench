@@ -109,7 +109,7 @@ Then open http://127.0.0.1:8731
 
 ## Tests
 
-329 tests. Every measurement claim has a control that can fail, and a negative control
+334 tests. Every measurement claim has a control that can fail, and a negative control
 proving the check has teeth. The rig raises a distinct error when an assertion accepts
 something it was supposed to reject.
 
@@ -118,8 +118,8 @@ python -m pytest
 python tools/mutate.py
 ```
 
-The mutation tool breaks the code 66 ways and checks the suite notices, working on a
-copy of the tree rather than the tree itself. All 66 are caught. It has found faults a
+The mutation tool breaks the code 68 ways and checks the suite notices, working on a
+copy of the tree rather than the tree itself. All 68 are caught. It has found faults a
 green suite cannot, and seven of the ledger entries came from it, including three tests
 that were passing for reasons unrelated to what they were written for.
 

@@ -297,3 +297,61 @@ def test_it_writes_them_into_every_file_in_the_run(album, serving, tmp_path):
         assert got["artist"] == "BRUMA" and got["genre"] == "Guaracha", made.name
         assert got["title"] == made.stem, "the title is each file's own name"
         assert got["album"] == "", "nothing was typed for album"
+
+# Neither of these grows without a bound. A process that runs all day and forgets
+# nothing is a memory ceiling with a longer fuse.
+
+def measured(name):
+    """A key shaped like the real ones, without a file behind it."""
+    return ((name, 0, 0), "target")
+
+
+def test_it_holds_only_the_last_few_measurements():
+    for i in range(serve.KEEP_MEASURED + 3):
+        serve.MEASURED[measured(f"f{i}")] = i
+        while len(serve.MEASURED) > serve.KEEP_MEASURED:
+            serve.MEASURED.popitem(last=False)
+    assert len(serve.MEASURED) == serve.KEEP_MEASURED
+
+
+def test_what_it_drops_is_the_one_least_recently_used(album, serving, tmp_path):
+    """Not the oldest. Something looked at again is something still being looked at."""
+    for i in range(serve.KEEP_MEASURED):
+        where = tmp_path / f"one{i}"
+        where.mkdir()
+        sig.write(where / "a.wav", music.build("dense", 120.0, seconds=1.0))
+        get(f"{serving}/?what=one{i}/&target={TARGET}")
+    first = list(serve.MEASURED)[0]
+    get(f"{serving}/?what=one0/&target={TARGET}")
+    assert list(serve.MEASURED)[-1] == first, "using it again did not move it to the end"
+
+    where = tmp_path / "late"
+    where.mkdir()
+    sig.write(where / "a.wav", music.build("dense", 120.0, seconds=1.0))
+    get(f"{serving}/?what=late/&target={TARGET}")
+    assert len(serve.MEASURED) == serve.KEEP_MEASURED
+    assert first in serve.MEASURED, "the one used again is the one that was dropped"
+
+
+def test_it_holds_only_the_last_few_runs(album, serving):
+    for _ in range(serve.KEEP_JOBS + 3):
+        _, where, _ = post(serving, "album/", serve.NONE)
+        until_finished(serving, where)
+    assert len(serve.JOBS) <= serve.KEEP_JOBS
+
+
+def test_a_dropped_run_never_lends_its_number_to_a_later_one(album, serving):
+    seen = set()
+    for _ in range(serve.KEEP_JOBS + 3):
+        _, where, _ = post(serving, "album/", serve.NONE)
+        assert where not in seen, "a run came back under a number already used"
+        seen.add(where)
+
+
+def test_a_run_that_is_still_going_is_never_dropped():
+    serve.JOBS["1"] = {"running": True}
+    for i in range(2, serve.KEEP_JOBS + 4):
+        serve.JOBS[str(i)] = {"running": False}
+        serve.forget_old_jobs()
+    assert "1" in serve.JOBS, "something is writing files under that one"
+    assert len(serve.JOBS) <= serve.KEEP_JOBS + 1
