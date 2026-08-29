@@ -11,6 +11,18 @@ sys.path.insert(0, str(HERE.parent / "tools"))
 import serve
 
 
+@pytest.fixture(autouse=True)
+def forget():
+    """The server remembers the last thing measured and what it read, for the life of
+    the process. Tests share one process, so one test landing on another's folder is a
+    pass that means nothing."""
+    serve.LAST.clear()
+    serve.MEASURED.clear()
+    yield
+    serve.LAST.clear()
+    serve.MEASURED.clear()
+
+
 @pytest.fixture
 def serving(tmp_path):
     """The bench on a port of its own, over an empty folder. A test puts into tmp_path

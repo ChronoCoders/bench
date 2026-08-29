@@ -72,6 +72,16 @@ def choices(root: Path, depth: int = DEPTH) -> list[str]:
     return out
 
 
+def inside(root: Path, path: Path) -> bool:
+    """Whether a path really is under the folder being served.
+
+    Comparing the front of one string against another says Downloads (Mastered) is
+    inside Downloads, which is how the output folder for the root came to be offered
+    at all: it sits beside what is being served, not in it.
+    """
+    return path == root or root in path.parents
+
+
 def out_dir_for(path: Path) -> Path:
     """Beside what was chosen, never inside it.
 
@@ -89,6 +99,28 @@ def out_dir_for(path: Path) -> Path:
 # person in front of it has.
 LAST: dict[str, str] = {}
 
+# What has already been measured this run, so landing on it is instant. Keyed on what
+# the files were when they were read, not on their names: a folder whose contents have
+# changed is a different folder. It lives and dies with the process and nothing is
+# written down, because a measurement that outlives the thing it measured is entry 2's
+# fault in a new coat.
+MEASURED: dict[tuple, object] = {}
+
+
+def stamp(path: Path) -> tuple:
+    if path.is_dir():
+        return (str(path),) + tuple(
+            (p.name, p.stat().st_mtime_ns, p.stat().st_size) for p in audio_in(path))
+    found = path.stat()
+    return (str(path), found.st_mtime_ns, found.st_size)
+
+
+def remember(path: Path, target_name: str, make):
+    key = (stamp(path), target_name)
+    if key not in MEASURED:
+        MEASURED[key] = make()
+    return MEASURED[key]
+
 JOBS: dict[str, dict] = {}
 JOBS_LOCK = threading.Lock()
 
@@ -100,10 +132,16 @@ def _refusal(root: Path, what: str, target_name: str) -> str | None:
         return ("no target is chosen, and every correction here is derived from the "
                 "distance to one")
     path = (root / what.rstrip("/")).resolve()
-    if not str(path).startswith(str(root)):
+    if not inside(root, path):
         return "that path is outside the folder being served"
     if not path.exists():
         return f"{what} is not there any more"
+    # The output folder sits beside what was chosen. Beside the served root is outside
+    # it, and writing outside the folder being served is worse than not offering to.
+    out = out_dir_for(path)
+    if not inside(root, out):
+        return (f"mastering {what} would write to {out}, which is outside the folder "
+                "being served. Choose something inside it")
     return None
 
 
@@ -156,53 +194,62 @@ def writes_into(root: Path, what: str) -> str:
     if not what:
         return ""
     path = (root / what.rstrip("/")).resolve()
-    if not str(path).startswith(str(root)) or not path.exists():
+    if not inside(root, path) or not path.exists():
         return ""
     out = out_dir_for(path)
-    try:
-        return str(out.relative_to(root)) + "/"
-    except ValueError:
-        return str(out)
+    if not inside(root, out):
+        return ""
+    return str(out.relative_to(root)) + "/"
 
 
-def opening(root: Path, what: str, target_name: str) -> tuple[str, str]:
-    """What to show when nothing was asked for: the last thing measured, or the first
-    thing in the picker with the first target."""
+def opening(root: Path, what: str, target_name: str) -> tuple[str, str, bool]:
+    """What to show when nothing was asked for, and whether it is ready to show.
+
+    The last thing measured, which is held in memory and comes back at once. Not the
+    first thing in the picker: measuring is minutes of work on a real record, and a
+    page load that starts it leaves the browser waiting on a spinner with nothing to
+    say for itself. That is what pressing Measure is for.
+    """
     if what:
-        return what, target_name
+        return what, target_name, True
     offered, named = choices(root), targets()
     # Only if it is still there. A remembered choice is a path, and a path that has
     # been moved or renamed would otherwise be measured on every bare visit.
     remembered = LAST.get("what")
-    what = remembered if remembered in offered else (offered[0] if offered else "")
+    ready = remembered in offered
+    what = remembered if ready else (offered[0] if offered else "")
     if not target_name or target_name == NONE:
         held = LAST.get("target")
         target_name = held if held in named else (named[0] if named else NONE)
-    return what, target_name
+    return what, target_name, ready
 
 
 def render(root: Path, what: str, target_name: str) -> str:
-    what, target_name = opening(root, what, target_name)
+    what, target_name, ready = opening(root, what, target_name)
     head = page.controls(choices(root), targets(), what, target_name, writes_into(root, what))
     if not what:
         return page.document("Bench", head + page.said(
             "Nothing to measure", "This folder holds no audio the bench can read."))
+    if not ready:
+        return page.document("Bench", head + page.said(
+            "Ready", f"{what} is chosen. Press Measure to read it.",
+            "nothing measured yet this run"))
 
     chosen = None
     if target_name and target_name != NONE:
         chosen = compare.load(TARGETS / f"{target_name}.json")
 
     path = (root / what.rstrip("/")).resolve()
-    if not str(path).startswith(str(root)):
+    if not inside(root, path):
         return page.document("Bench", head + page.said(
             "Refused", "That path is outside the folder being served."))
 
     LAST["what"], LAST["target"] = what, target_name
     if path.is_dir():
-        sheet = folder.measure(path, chosen)
+        sheet = remember(path, target_name, lambda: folder.measure(path, chosen))
         return page.document(path.name or "Folder", head + page.folder_view(sheet))
 
-    one = measurement.of_file(path)
+    one = remember(path, "", lambda: measurement.of_file(path))
     result = compare.against(one, chosen) if chosen else None
     return page.document(path.name, head + page.file_view(one, result, chosen))
 

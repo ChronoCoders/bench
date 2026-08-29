@@ -201,3 +201,66 @@ def test_every_page_the_server_hands_over_is_framed(album, serving):
         assert '<div class="card' in body, f"{name} has no card"
         assert "<h1" not in body and "class=\"head\"" not in body, name
         assert body.index('<div class="card') < body.index("</main>"), name
+
+def test_a_page_load_never_starts_a_measurement(album, serving):
+    """A real record is minutes of work. A landing page that starts it leaves the
+    browser waiting on a spinner with nothing to say for itself."""
+    started = time.monotonic()
+    _, html = get(f"{serving}/")
+    assert time.monotonic() - started < 5.0, "the landing page measured something"
+    assert "Press Measure to read it" in html
+
+
+def test_it_lands_on_the_last_thing_measured(album, serving):
+    get(f"{serving}/?what=album/&target={TARGET}")
+    started = time.monotonic()
+    _, html = get(f"{serving}/")
+    assert "Press Measure" not in html, "it should have opened on what was measured"
+    assert "SPREAD" in html.upper()
+    assert time.monotonic() - started < 5.0, "landing on it measured it a second time"
+
+
+def test_measuring_the_same_thing_twice_reads_it_once(album, serving):
+    first = time.monotonic()
+    get(f"{serving}/?what=album/&target={TARGET}")
+    once = time.monotonic() - first
+    again = time.monotonic()
+    get(f"{serving}/?what=album/&target={TARGET}")
+    assert time.monotonic() - again < max(once / 4.0, 1.0), "it was read again"
+
+
+def test_a_changed_file_is_read_again(album, serving, tmp_path):
+    """The control on the one above. What is held is keyed on what the files were, so
+    a folder whose contents have changed is a different folder."""
+    get(f"{serving}/?what=album/&target={TARGET}")
+    sig.write(album / "three.wav", music.build("dense", 120.0, seconds=SHORT_S))
+    started = time.monotonic()
+    _, html = get(f"{serving}/?what=album/&target={TARGET}")
+    assert "three" in html, "the new file is not in the table"
+    assert time.monotonic() - started > 0.2, "it came back too fast to have been read"
+
+def test_mastering_the_served_root_is_refused(album, serving, tmp_path):
+    """Its output folder would sit beside what is being served, which is outside it."""
+    _, where, _ = post(serving, "./", TARGET)
+    _, html = get(where)
+    assert "Not started" in html
+    assert "outside the folder being served" in html
+    assert not list(tmp_path.parent.glob(tmp_path.name + serve.MASTERED_SUFFIX))
+
+
+def test_the_output_box_is_absent_when_there_is_nowhere_inside_to_write(album, serving):
+    _, html = get(f"{serving}/?what=./&target={TARGET}")
+    assert "OUTPUT" not in html
+    _, html = get(f"{serving}/?what=album/&target={TARGET}")
+    assert "OUTPUT" in html, "a folder inside the root still has somewhere to write"
+
+
+def test_a_sibling_is_not_inside(tmp_path):
+    """Comparing the front of one string against another says Downloads (Mastered) is
+    inside Downloads. It is beside it."""
+    root = tmp_path / "Downloads"
+    root.mkdir()
+    assert serve.inside(root, root / "album")
+    assert serve.inside(root, root)
+    assert not serve.inside(root, tmp_path / "Downloads (Mastered)")
+    assert not serve.inside(root, tmp_path / "Downloads2")
