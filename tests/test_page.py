@@ -191,16 +191,16 @@ def test_how_far_off_is_a_number_and_not_only_a_colour():
     Somebody who cannot tell the two colours apart can still tell those three apart."""
     inside = page.master_view(mastered_result([compare.INSIDE, compare.INSIDE],
                                               [compare.INSIDE, compare.INSIDE]))
-    assert 'class="dev "></td>' in inside
+    assert 'class="n dev "></td>' in inside
 
     on_line = mastered_result([compare.ON_THE_LINE, compare.INSIDE],
                               [compare.INSIDE, compare.INSIDE])
     on_line["after"]["comparison"]["rows"][0]["deviation"] = 0.0
-    assert 'class="dev line">0.0<' in page.master_view(on_line)
+    assert 'class="n dev line">0.0<' in page.master_view(on_line)
 
     out = page.master_view(mastered_result([compare.BELOW, compare.INSIDE],
                                            [compare.INSIDE, compare.INSIDE]))
-    assert 'class="dev out">-2.8' in out
+    assert 'class="n dev out">-2.8' in out
 
 
 def test_the_view_says_whether_it_arrived():
@@ -244,7 +244,7 @@ def form():
 
 def test_the_page_offers_mastering_beside_measuring():
     html = form()
-    assert ">Measure<" in html and ">Master<" in html
+    assert ">MEASURE<" in html and ">MASTER<" in html
 
 
 def test_mastering_is_a_post_and_measuring_is_not():
@@ -302,8 +302,8 @@ def test_a_finished_run_counts_what_arrived():
     done[1]["reached"]["arrived"] = False
     html = page.mastering_view(working(running=False, done=done))
     assert "2 files written, 1 of them inside the target" in html
-    assert html.count("<h2>Plan</h2>") == 2, "one block per file"
-    assert html.count("<h2>Spectral balance</h2>") == 2
+    assert html.count("<h3>PLAN</h3>") == 2, "one block per file"
+    assert html.count("<h3>SPECTRAL BALANCE</h3>") == 2
 
 
 def test_a_file_it_would_not_master_is_named_with_the_reason():
@@ -330,7 +330,7 @@ def test_the_instrument_is_named_once():
 # programs, and that is countable rather than a matter of taste.
 
 def panels(html):
-    return re.findall(r'<div class="card[^"]*"><div class="ch"><h2>([^<]*)</h2>', html)
+    return re.findall(r'<div class="card[^"]*"><div class="ch"><h3>([^<]*)</h3>', html)
 
 
 def three_views(tmp_path):
@@ -354,7 +354,8 @@ def test_every_panel_on_every_view_is_the_same_card(tmp_path):
     """Nothing sits outside the frame on any of them. The one card with no header is
     the pair of waveforms, where the rows carry their own labels."""
     for name, html in three_views(tmp_path).items():
-        assert html.startswith('<div class="card'), f"{name} opens outside a card"
+        assert html.startswith(('<div class="card', '<div class="mv"><div class="card')), (
+            f"{name} opens outside a card")
         assert panels(html), f"{name} has no panels at all"
         assert html.count('<div class="card') - html.count('<div class="ch">') <= 1, name
 
@@ -365,4 +366,4 @@ def test_no_view_keeps_a_heading_of_its_own(tmp_path):
     for name, html in three_views(tmp_path).items():
         assert "<h1" not in html, name
         assert 'class="head"' not in html, name
-        assert "<h3" not in html, f"{name} skips a heading level"
+        assert "<h1" not in html, f"{name} keeps a heading of its own"

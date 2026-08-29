@@ -10,188 +10,79 @@ from pathlib import Path
 
 from bench import compare, fields, measurement, typeface
 
-STYLE = """
-:root {
-  --bg: #08090b; --panel: #0d0f13; --panel-hi: #12151a;
-  --edge: #1a1d23; --edge-soft: #141720; --edge-hi: #2a2f3a;
-  --text: #efe9de; --muted: #cfc9be; --dim: #5f6672; --faint: #3d434d;
-  --unclaimed: #6a7280; --src: #6a7280; --mst: #efe9de;
-  --accent: #34e7de; --cue: #ffb020; --kill: #ff4d5e;
-  --mono: 'JetBrains Mono', ui-monospace, monospace;
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  min-height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Chakra Petch', system-ui, sans-serif;
-  font-size: 14px; line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-main { max-width: 1240px; margin: 0 auto; padding: 26px 22px 80px; }
+DESIGN = (Path(__file__).resolve().parent / "design.css").read_text(encoding="utf-8")
+
+STYLE = DESIGN + """
+/* Everything below is the folder table and the single file view, which keep the
+   redesign they already had. They are held off the reference stylesheet by a class
+   so that taking it wholesale could not change a table nobody asked to change. */
+:root { --edge-hi: #2a2e36; --unclaimed: #6a7280;
+        --mono: 'JetBrains Mono', ui-monospace, monospace; }
+main { max-width: none; margin: 0; padding: 0; }
+h1, h2, h3 { font-weight: 500; }
 p { margin-bottom: 10px; color: var(--dim); max-width: 62em; }
-.controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
-            padding: 13px 15px; border: 1px solid var(--edge); border-radius: 9px;
-            background: linear-gradient(180deg, var(--panel-hi), var(--panel));
-            margin-bottom: 16px; }
-.control.grow { flex: 1 1 auto; max-width: 400px; }
-.control.grow select { width: 100%; }
-button.reads { color: var(--dim); border-color: var(--edge); }
-button.reads:hover { color: var(--accent); border-color: var(--accent); }
-.control .said { font-family: var(--mono); font-size: 12px; color: var(--faint);
-                 padding: 7px 0; white-space: nowrap; }
-.control { display: flex; flex-direction: column; gap: 5px; }
-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em; color: var(--dim); }
-select, button {
-  background: var(--bg); color: var(--text); border: 1px solid var(--edge);
-  border-radius: 2px; padding: 7px 9px; font: inherit; font-size: 13px; min-width: 230px;
-}
-button { min-width: 0; cursor: pointer; border-color: var(--edge-hi); letter-spacing: 0.06em;
-         text-transform: uppercase; font-size: 11px; padding: 9px 16px; }
-button:hover { border-color: var(--accent); color: var(--accent); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fld .said { display: block; background: #0a0c10; border: 1px solid var(--line);
+             border-radius: 6px; color: var(--text); font: inherit; font-size: 13px;
+             padding: 8px 11px; white-space: nowrap; overflow: hidden;
+             text-overflow: ellipsis; max-width: 320px; }
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 .wrap { overflow-x: auto; overflow-y: hidden; }
-table { border-collapse: collapse; width: 100%; }
-th, td { padding: 8px 0 8px 18px; border-bottom: 1px solid var(--edge-soft);
-         white-space: nowrap; }
-th:first-child, td:first-child { width: 1%; padding-left: 0; padding-right: 26px; }
-th.grp, td.grp { padding-left: 34px; position: relative; }
-th.grp::before, td.grp::before { content: ""; position: absolute; left: 16px;
-  top: -1px; bottom: -1px; border-left: 1px solid var(--edge-soft); }
-th.grp::before { top: auto; height: 11px; bottom: 9px; }
-th.quiet { color: var(--faint); }
-th { text-align: right; font-size: 10px; font-weight: 600; color: var(--dim);
-     text-transform: uppercase; letter-spacing: 0.09em; }
-th:first-child, td:first-child { text-align: left; }
-td { text-align: right; font-family: var(--mono); font-weight: 400; font-size: 12px;
-     font-variant-numeric: tabular-nums; color: var(--text); }
-td.name { font-family: 'Chakra Petch', system-ui, sans-serif; font-size: 13px;
-          color: var(--text); padding-right: 28px; }
-tbody tr:hover td { background: var(--panel-hi); }
-tr.pause td { border-bottom: none; padding: 0; height: 22px; }
-tr.pause td:hover { background: none; }
-tr.spread td { border-top: 1px solid var(--edge-hi); border-bottom: none; color: var(--text); }
-tr.spread td:first-child, tr.over td:first-child {
-  color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.09em; }
-tr.over td { color: var(--faint); font-size: 11px; border-bottom: none; padding-top: 0; }
-tr.spread td:hover, tr.over td:hover { background: none; }
-.blank { color: var(--faint); }
+.card .wrap, .card .inset { padding: 6px 15px 13px; }
+.card .inset p:last-child, .card .inset ul:last-child { margin-bottom: 0; }
+.card .inset .key { margin: 2px 0 0; }
+.card .plot { padding: 6px 15px 8px; }
+.ch .where { margin-left: auto; font-family: var(--mono); font-size: 11px;
+             color: var(--dimmer); text-align: right; }
+
+table.rows { border-collapse: collapse; width: 100%; }
+table.rows th, table.rows td { padding: 8px 0 8px 18px;
+    border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
+table.rows th:first-child, table.rows td:first-child { width: 1%; padding-left: 0;
+    padding-right: 26px; }
+table.rows th.grp, table.rows td.grp { padding-left: 34px; position: relative; }
+table.rows th.grp::before, table.rows td.grp::before { content: ""; position: absolute;
+    left: 16px; top: -1px; bottom: -1px; border-left: 1px solid var(--line-soft); }
+table.rows th.grp::before { top: auto; height: 11px; bottom: 9px; }
+table.rows th.quiet { color: var(--dimmer); }
+table.rows th { text-align: right; font-size: 10px; font-weight: 600; color: var(--dim);
+    text-transform: uppercase; letter-spacing: 0.09em; }
+table.rows th:first-child, table.rows td:first-child { text-align: left; }
+table.rows td { text-align: right; font-family: var(--mono); font-weight: 400;
+    font-size: 12px; font-variant-numeric: tabular-nums; color: var(--bone); }
+table.rows td.name { font-family: 'Chakra Petch', system-ui, sans-serif; font-size: 13px;
+    color: var(--bone); padding-right: 28px; }
+table.rows tbody tr:hover td { background: var(--panel-hi); }
+table.rows tr.pause td { border-bottom: none; padding: 0; height: 22px; }
+table.rows tr.pause td:hover { background: none; }
+table.rows tr.spread td { border-top: 1px solid var(--edge-hi); border-bottom: none;
+    color: var(--bone); }
+table.rows tr.spread td:first-child, table.rows tr.over td:first-child { color: var(--dim);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.09em; }
+table.rows tr.over td { color: var(--dimmer); font-size: 11px; border-bottom: none;
+    padding-top: 0; }
+table.rows tr.spread td:hover, table.rows tr.over td:hover { background: none; }
+.blank { color: var(--dimmer); }
 .line { color: var(--cue); background: rgba(255, 176, 32, 0.12);
         box-shadow: inset 0 -2px 0 var(--cue); }
 .out { color: var(--kill); }
 .none { color: var(--unclaimed); }
-.gap { color: var(--faint); }
+.gap { color: var(--dimmer); }
 .note { font-size: 12px; color: var(--dim); margin-top: 8px; }
-.reasons { margin-top: 12px; list-style: none; }
-.reasons li { padding: 7px 0; border-bottom: 1px solid var(--edge); color: var(--dim);
+.reasons { list-style: none; }
+.reasons li { padding: 7px 0; border-bottom: 1px solid var(--line); color: var(--dim);
               font-size: 12px; max-width: 74em; }
-.reasons b { color: var(--text); font-weight: 600; }
-.tag { display: inline-block; font-size: 9px; letter-spacing: 0.09em; text-transform: uppercase;
-       color: var(--faint); border: 1px solid var(--edge); border-radius: 2px;
-       padding: 1px 5px; margin-left: 6px; vertical-align: 1px; }
-.key { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: var(--dim);
-       margin-top: 10px; margin-bottom: 4px; }
-.key .unmarked { color: var(--faint); }
+.reasons li:last-child { border-bottom: none; padding-bottom: 0; }
+.reasons b { color: var(--bone); font-weight: 600; }
+.tag { display: inline-block; font-size: 9px; letter-spacing: 0.09em;
+       text-transform: uppercase; color: var(--dimmer); border: 1px solid var(--line);
+       border-radius: 2px; padding: 1px 5px; margin-left: 6px; vertical-align: 1px; }
+.key { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: var(--dim); }
+.key .unmarked { color: var(--dimmer); }
 .key span { display: inline-flex; align-items: center; gap: 5px; }
-.key i { width: 9px; height: 9px; border-radius: 1px; display: inline-block; font-style: normal; }
-svg { display: block; width: 100%; height: auto; }
-.plot { background: var(--panel); border: 1px solid var(--edge); border-radius: 3px;
-        padding: 14px 16px 8px; }
-
-.bar { display: flex; align-items: flex-end; gap: 12px;
-       background: linear-gradient(180deg, var(--panel-hi), var(--panel));
-       border: 1px solid var(--edge); border-radius: 9px; padding: 13px 15px;
-       margin-bottom: 16px; flex-wrap: wrap; }
-.bar .control.grow { flex: 1 1 auto; max-width: 400px; }
-.bar .reads { color: var(--dim); border-color: var(--edge); background: transparent; }
-.bar .said { display: flex; flex-direction: column; gap: 6px; font-family: var(--mono);
-             font-size: 11px; color: var(--faint); padding-bottom: 8px; }
-
-.card { background: var(--panel); border: 1px solid var(--edge); border-radius: 9px;
-        margin-bottom: 16px; }
-.ch { display: flex; align-items: baseline; gap: 16px; padding: 12px 15px 11px;
-      border-bottom: 1px solid var(--edge-soft); }
-.ch h2 { font-size: 9px; letter-spacing: 0.26em; color: var(--dim); font-weight: 500;
-         text-transform: uppercase; margin: 0; }
-.ch .where { margin-left: auto; font-family: var(--mono); font-size: 11px;
-             color: var(--faint); text-align: right; }
-
-.plan { display: grid; grid-template-columns: repeat(7, 1fr); }
-.pc { padding: 12px 15px; border-right: 1px solid var(--edge-soft); }
-.pc:last-child { border-right: none; }
-.pc span { display: block; font-size: 9px; letter-spacing: 0.2em; color: var(--dim);
-           margin-bottom: 6px; text-transform: uppercase; }
-.pc b { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 15px;
-        font-weight: 400; color: var(--text); }
-.pc.q b { color: var(--dim); font-size: 13px; }
-
-.wv { padding: 11px 15px 13px; border-bottom: 1px solid var(--edge-soft); }
-.wv:last-child { border-bottom: none; }
-.wh { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
-.wh b { font-size: 10px; letter-spacing: 0.24em; font-weight: 500; text-transform: uppercase; }
-.wh .s { color: var(--dim); }
-.wh .m { color: var(--text); }
-.wh .figs { margin-left: auto; display: flex; gap: 22px; font-family: var(--mono);
-            font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
-.wh .figs i { font-style: normal; color: var(--faint); margin-right: 6px; font-size: 10px;
-              letter-spacing: 0.14em; }
-svg.wave { display: block; width: 100%; height: 56px; }
-svg.wave path { fill: var(--src); }
-svg.wave.m path { fill: var(--mst); }
-.wv.hold svg.wave { border-top: 1px solid var(--edge-soft); }
-
-.split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: stretch; }
-.split .card { display: flex; flex-direction: column; margin-bottom: 0; min-height: 26em; }
-.split .card table, .split .card .bands { flex: 1 1 auto; }
-
-table.ab th { font-size: 9px; font-weight: 500; letter-spacing: 0.2em; color: var(--dim);
-              text-align: right; padding: 0 0 8px 16px; border-bottom: 1px solid var(--edge);
-              text-transform: uppercase; }
-table.ab th.l, table.ab td.fld { text-align: left; padding-left: 15px; }
-table.ab th:first-child, table.ab td:first-child { width: auto; padding-right: 0; }
-table.ab td { padding: 7px 0 7px 16px; border-bottom: 1px solid var(--edge-soft);
-              text-align: right; font-size: 12.5px; font-family: var(--mono);
-              font-variant-numeric: tabular-nums; color: var(--muted); }
-table.ab tr:last-child td { border-bottom: none; }
-table.ab td.fld { font-family: 'Chakra Petch', system-ui, sans-serif; }
-table.ab td.u { color: var(--faint); font-size: 10px; letter-spacing: 0.12em;
-                text-align: left; padding-left: 7px; }
-table.ab td.t { color: var(--dim); font-size: 11px; }
-table.ab td.d { color: var(--dim); }
-table.ab td.dev { padding-right: 15px; }
-table.ab td.grp { border-left: 1px solid var(--edge-soft); padding-left: 16px; }
-table.ab th.grp { border-left: 1px solid var(--edge-soft); padding-left: 16px; }
-table.ab td.out { color: var(--kill); }
-table.ab td.line { color: var(--cue); }
-table.ab td.none, table.ab td.fld.none { color: var(--unclaimed); }
-table.ab tbody tr:hover td { background: var(--panel-hi); }
-
-.bands { padding: 8px 15px 12px; display: flex; flex-direction: column; }
-.bhead, .bnd { display: grid; grid-template-columns: 84px 1fr 54px 54px 54px; gap: 10px;
-               text-align: right; }
-.bhead { font-size: 9px; letter-spacing: 0.2em; color: var(--dim); padding-bottom: 8px;
-         border-bottom: 1px solid var(--edge); text-transform: uppercase; }
-.bhead span:first-child, .bhead span:nth-child(2) { text-align: left; }
-.bnd { align-items: center; padding: 3px 0; border-bottom: 1px solid var(--edge-soft);
-       flex: 1 1 auto; }
-.bnd:last-child { border-bottom: none; }
-.bl { font-size: 11px; color: var(--dim); text-align: left; }
-.bar2 { position: relative; height: 11px; background: var(--bg);
-        border: 1px solid var(--edge-soft); border-radius: 2px; overflow: hidden; }
-.bar2 i { position: absolute; left: 0; display: block; }
-.sb { top: 1px; height: 4px; background: var(--src); }
-.mb { bottom: 1px; height: 4px; background: var(--mst); }
-.bv { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11.5px;
-      color: var(--muted); }
-.bnd .bv.s { color: var(--dim); }
-.bd { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11.5px;
-      color: var(--faint); }
-.hold, .hold b, .hold .bv, .hold .bd { color: var(--faint); }
-.card .wrap, .card .inset { padding: 6px 15px 13px; }
-.card .inset p:last-child, .card .inset ul:last-child { margin-bottom: 0; }
-.card .inset .key { margin: 2px 0 0; }
-.card .inset .reasons li:last-child { border-bottom: none; padding-bottom: 0; }
-.card .plot { background: none; border: none; border-radius: 0; padding: 6px 15px 8px; }
+.key i { width: 9px; height: 9px; border-radius: 1px; display: inline-block;
+         font-style: normal; }
+.plot svg { display: block; width: 100%; height: auto; }
+.hold, .hold b, .hold .bv, .hold .bd { color: var(--dimmer); }
 """
 
 VERDICT_CLASS = {
@@ -229,7 +120,7 @@ def card(title: str, body: str, where: str = "") -> str:
     goes inside it is the same table, with the same numbers and the same verdicts, as
     before there was a frame."""
     aside = f"<span class=\"where\">{escape(where)}</span>" if where else ""
-    return (f"<div class=\"card\"><div class=\"ch\"><h2>{escape(title)}</h2>{aside}</div>"
+    return (f"<div class=\"card\"><div class=\"ch\"><h3>{escape(title)}</h3>{aside}</div>"
             f"{body}</div>")
 
 
@@ -258,17 +149,18 @@ def controls(files: list[str], targets: list[str], chosen_file: str, chosen_targ
 
     written = ""
     if writes_into:
-        written = ("<div class=\"control\"><label>Output</label>"
+        written = ("<div class=\"fld\"><label>OUTPUT</label>"
                    f"<span class=\"said\">{escape(writes_into)}</span></div>")
     return (
-        "<form class=\"controls\" method=\"get\" action=\"/\">"
-        "<div class=\"control grow\"><label for=\"what\">File or folder</label>"
+        "<form class=\"bar\" method=\"get\" action=\"/\">"
+        "<div class=\"fld grow\"><label for=\"what\">FILE OR FOLDER</label>"
         f"<select id=\"what\" name=\"what\">{options(files, chosen_file)}</select></div>"
-        "<div class=\"control\"><label for=\"target\">Target</label>"
+        "<div class=\"fld\"><label for=\"target\">TARGET</label>"
         f"<select id=\"target\" name=\"target\">{options(['none'] + targets, chosen_target)}"
         "</select></div>" + written +
-        "<button class=\"reads\" type=\"submit\">Measure</button>"
-        f"<button type=\"submit\" formmethod=\"post\" formaction=\"{MASTER_URL}\">Master</button>"
+        "<button class=\"go ghost\" type=\"submit\">MEASURE</button>"
+        f"<button class=\"go\" type=\"submit\" formmethod=\"post\" "
+        f"formaction=\"{MASTER_URL}\">MASTER</button>"
         "</form>"
     )
 
@@ -401,7 +293,7 @@ def folder_view(sheet: dict) -> str:
     table = (
         (f"<div class=\"inset\">{key()}</div>" if graded else "")
         + "<div class=\"wrap\">"
-        + f"<table><thead><tr><th>Track</th>{head}</tr></thead><tbody>{''.join(rows)}</tbody>"
+        + f"<table class=\"rows\"><thead><tr><th>Track</th>{head}</tr></thead><tbody>{''.join(rows)}</tbody>"
         + f"<tfoot><tr class=\"pause\"><td colspan=\"{len(columns) + 1}\"></td></tr>"
         f"<tr class=\"spread\"><td>Spread</td>{''.join(spread)}</tr>"
         f"<tr class=\"over\"><td>Files</td>{''.join(over)}</tr></tfoot></table></div>"
@@ -479,7 +371,7 @@ def comparison_view(result: dict) -> str:
         + ("s" if evidence["n"] != 1 else "") +
         (", all lossy." if evidence.get("all_sources_lossy") else ".") +
         f" {escape(verdict)}</p></div>"
-        "<div class=\"wrap\"><table><thead><tr><th>Field</th><th>Value</th>"
+        "<div class=\"wrap\"><table class=\"rows\"><thead><tr><th>Field</th><th>Value</th>"
         "<th>Plus minus</th><th>Target</th><th>Deviation</th><th>Verdict</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>"
         + (f"<div class=\"inset\"><ul class=\"reasons\">{''.join(gaps)}</ul></div>"
@@ -513,7 +405,7 @@ def octaves(measurement: dict) -> str:
         "<div class=\"inset\"><p>Which of these is the beat is a musical judgement, not a "
         "property of the signal. Occupancy is the share of grid ticks that carry an onset, "
         "coverage the share of onsets that sit on a tick.</p></div>"
-        "<div class=\"wrap\"><table><thead><tr><th>Rate</th><th>Against the reported one</th>"
+        "<div class=\"wrap\"><table class=\"rows\"><thead><tr><th>Rate</th><th>Against the reported one</th>"
         "<th>Occupancy</th><th>Coverage</th><th>Onsets fitted</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>"
     )
@@ -556,7 +448,8 @@ def file_view(measurement: dict, result: dict | None, target: dict | None) -> st
 
     body = (
         card("Measured",
-             f"<div class=\"wrap\"><table><tbody>{''.join(rows)}</tbody></table></div>",
+             f"<div class=\"wrap\"><table class=\"rows\"><tbody>{''.join(rows)}"
+             "</tbody></table></div>",
              meta)
         + (card("Reasons", f"<div class=\"inset\"><ul class=\"reasons\">"
                            f"{''.join(missing)}</ul></div>") if missing else "")
@@ -598,88 +491,52 @@ def _plan_items(plan: dict) -> str:
     return f"<ul class=\"reasons\">{''.join(items)}</ul>"
 
 WORKING_AGAIN_IN_S = 3
+PEAK_FIELD = "loudness.true_peak_dbtp"
 WAVE_HEIGHT = 56
 WAVE_WIDTH = 1000
-FIGURES = (("lufs", "loudness.integrated_lufs"), ("dbtp", "loudness.true_peak_dbtp"),
-           ("crest", "levels.crest_db"))
+FIGURES = (("LUFS", "loudness.integrated_lufs"), ("DBTP", "loudness.true_peak_dbtp"),
+           ("CREST", "levels.crest_db"))
+PLAN_CELLS = ("GAIN", "LOW CUT", "CEILING", "LIMITER", "REDUCTION", "PREDICTED", "MEASURED")
+QUIET_CELLS = ("PREDICTED", "MEASURED")
 
 
 def _wave(shape: list, master_side: bool) -> str:
-    """A picture of the file, drawn from the samples that were written. Nothing reads
-    it back and no verdict rests on it, which is why it is the only thing on this page
-    that is allowed to be a shape rather than a number."""
+    """A picture of the file, drawn from the samples that were written. Nothing reads it
+    back and no verdict rests on it, which is why it is the only thing on this page
+    allowed to be a shape rather than a number."""
     middle = WAVE_HEIGHT / 2.0
+    fill = "var(--mst)" if master_side else "var(--src)"
     if not shape:
-        return (f"<svg class=\"wave{' m' if master_side else ''}\" viewBox=\"0 0 "
-                f"{WAVE_WIDTH} {WAVE_HEIGHT}\" preserveAspectRatio=\"none\"></svg>")
+        return (f"<svg viewBox=\"0 0 {WAVE_WIDTH} {WAVE_HEIGHT}\" "
+                "preserveAspectRatio=\"none\"></svg>")
     step = WAVE_WIDTH / len(shape)
     top = " ".join(f"{i * step:.1f},{middle - v * middle:.1f}" for i, v in enumerate(shape))
     bottom = " ".join(f"{i * step:.1f},{middle + v * middle:.1f}"
                       for i, v in reversed(list(enumerate(shape))))
-    return (f"<svg class=\"wave{' m' if master_side else ''}\" viewBox=\"0 0 "
-            f"{WAVE_WIDTH} {WAVE_HEIGHT}\" preserveAspectRatio=\"none\">"
-            f"<path d=\"M{top} L{bottom} Z\"></path></svg>")
+    return (f"<svg viewBox=\"0 0 {WAVE_WIDTH} {WAVE_HEIGHT}\" preserveAspectRatio=\"none\">"
+            f"<path d=\"M{top} L{bottom} Z\" fill=\"{fill}\"></path></svg>")
 
 
-def _figures(measurement: dict) -> str:
+def _figures(measured: dict) -> str:
     out = []
     for unit, path in FIGURES:
         field = fields.BY_PATH.get(path)
         out.append(f"<span><i>{escape(unit)}</i>"
-                   f"{number(compare.dig(measurement, path), field.decimals if field else 1)}"
+                   f"{number(compare.dig(measured, path), field.decimals if field else 1)}"
                    "</span>")
     return "".join(out)
 
 
 def _side(name: str, side: dict, master_side: bool) -> str:
-    klass = "m" if master_side else "s"
     figures = _figures(side.get("measurement", {})) if side else ""
-    return (f"<div class=\"wv\"><div class=\"wh\"><b class=\"{klass}\">{escape(name)}</b>"
+    return (f"<div class=\"wv\"><div class=\"wh\">"
+            f"<b class=\"{'m' if master_side else 's'}\">{escape(name)}</b>"
             f"<span class=\"figs\">{figures}</span></div>"
             + _wave(side.get("waveform") or [], master_side) + "</div>")
 
 
-def _plan_cell(label: str, value: str, quiet: bool = False) -> str:
-    return (f"<div class=\"pc{' q' if quiet else ''}\"><span>{escape(label)}</span>"
-            f"<b>{value}</b></div>")
-
-
 def _signed(value, decimals: int) -> str:
-    if value is None:
-        return number(None, decimals)
-    return f"{value:+.{decimals}f}"
-
-
-def plan_strip(result: dict) -> str:
-    """Seven numbers across the top, in the order the layer decides them."""
-    built = result.get("plan") or {"steps": []}
-    gain = _step(built, "gain")
-    cut = _step(built, "low cut")
-    squash = _step(built, "limiter")
-    after = (result.get("after") or {}).get("measurement", {})
-    predicted = built.get("predicted") or {}
-
-    ceiling = None
-    for row in ((result.get("after") or {}).get("comparison") or {}).get("rows", []):
-        if row["field"] == "loudness.true_peak_dbtp" and row.get("bound"):
-            ceiling = row["bound"].get("max")
-
-    setting = number(None, 1)
-    if squash:
-        setting = f"{squash['attack_ms']:g} / {squash['release_ms']:g}"
-    return (
-        "<div class=\"plan\">"
-        + _plan_cell("gain", _signed(gain["db"] if gain else None, 2))
-        + _plan_cell("low cut", f"{cut['hz']:.0f}" if cut else number(None, 0))
-        + _plan_cell("ceiling", number(ceiling, 2))
-        + _plan_cell("limiter", setting)
-        + _plan_cell("reduction", number(
-            squash["gain_reduction"]["largest_db"] if squash else None, 2))
-        + _plan_cell("predicted", number(predicted.get("integrated_lufs"), 2), quiet=True)
-        + _plan_cell("measured", number(
-            compare.dig(after, "loudness.integrated_lufs"), 2), quiet=True)
-        + "</div>"
-    )
+    return number(None, decimals) if value is None else f"{value:+.{decimals}f}"
 
 
 def _step(built: dict, correction: str):
@@ -689,46 +546,70 @@ def _step(built: dict, correction: str):
     return None
 
 
+def plan_strip(result: dict) -> str:
+    """Seven numbers across the top, in the order the layer decides them."""
+    built = result.get("plan") or {"steps": []}
+    gain, cut, squash = _step(built, "gain"), _step(built, "low cut"), _step(built, "limiter")
+    after = (result.get("after") or {}).get("measurement", {})
+    predicted = built.get("predicted") or {}
+    ceiling = None
+    for row in ((result.get("after") or {}).get("comparison") or {}).get("rows", []):
+        if row["field"] == PEAK_FIELD and row.get("bound"):
+            ceiling = row["bound"].get("max")
+
+    values = {
+        "GAIN": _signed(gain["db"] if gain else None, 2),
+        "LOW CUT": f"{cut['hz']:.0f}" if cut else number(None, 0),
+        "CEILING": number(ceiling, 2),
+        "LIMITER": (f"{squash['attack_ms']:g} / {squash['release_ms']:g}"
+                    if squash else number(None, 1)),
+        "REDUCTION": number(squash["gain_reduction"]["largest_db"] if squash else None, 2),
+        "PREDICTED": number(predicted.get("integrated_lufs"), 2),
+        "MEASURED": number(compare.dig(after, "loudness.integrated_lufs"), 2),
+    }
+    cells = "".join(
+        f"<div class=\"pc{' q' if name in QUIET_CELLS else ''}\"><span>{name}</span>"
+        f"<b>{values[name]}</b></div>" for name in PLAN_CELLS)
+    return f"<div class=\"plan\">{cells}</div>"
+
+
 def _ab_row(field: str, was: dict, now: dict) -> str:
     one = fields.BY_PATH.get(field)
     decimals = one.decimals if one else 3
-    unit = one.unit if one else ""
     bound = now.get("bound") or {}
-    shown = _bound_text(bound) if bound else ""
     delta = None
     if was.get("value") is not None and now.get("value") is not None:
         delta = round(now["value"] - was["value"], decimals)
-    advisory = now.get("advisory") or now["verdict"] in (compare.NO_TARGET, compare.NOT_MEASURED)
-    was_class = "none" if advisory else VERDICT_CLASS.get(was.get("verdict"), "")
-    now_class = "none" if advisory else VERDICT_CLASS.get(now.get("verdict"), "")
-    dev = "" if advisory else (number(now.get("deviation"), decimals)
-                               if now["verdict"] != compare.INSIDE else "")
+    quiet = now.get("advisory") or now["verdict"] in (compare.NO_TARGET, compare.NOT_MEASURED)
+    was_mark = "none" if quiet else VERDICT_CLASS.get(was.get("verdict"), "")
+    now_mark = "none" if quiet else VERDICT_CLASS.get(now.get("verdict"), "")
+    off = "" if quiet or now["verdict"] == compare.INSIDE else number(now.get("deviation"),
+                                                                     decimals)
     return (
-        f"<tr><td class=\"fld{' none' if advisory else ''}\">"
+        f"<tr><td class=\"fld{' adv' if quiet else ''}\">"
         f"{escape(fields.name_of(field))}</td>"
-        f"<td class=\"{was_class}\">{number(was.get('value'), decimals)}</td>"
-        f"<td class=\"{now_class}\">{number(now.get('value'), decimals)}</td>"
-        f"<td class=\"d\">{_signed(delta, decimals)}</td>"
-        f"<td class=\"u\">{escape(unit)}</td>"
-        f"<td class=\"t grp\">{escape(shown)}</td>"
-        f"<td class=\"dev {now_class}\">{dev}</td></tr>"
+        f"<td class=\"n {was_mark}\">{number(was.get('value'), decimals)}</td>"
+        f"<td class=\"n {now_mark}\">{number(now.get('value'), decimals)}</td>"
+        f"<td class=\"n d\">{_signed(delta, decimals)}</td>"
+        f"<td class=\"u\">{escape(one.unit if one else '')}</td>"
+        f"<td class=\"t\">{escape(_bound_text(bound) if bound else '')}</td>"
+        f"<td class=\"n dev {now_mark}\">{off}</td></tr>"
     )
+
+
+AB_HEAD = ("<thead><tr><th class=\"l\">FIELD</th><th>SOURCE</th><th>MASTER</th>"
+           "<th>DELTA</th><th style=\"text-align:left;padding-left:7px\"></th>"
+           "<th>TARGET</th><th style=\"padding-right:15px\">DEV</th></tr></thead>")
+BANDS_HEAD = ("<div class=\"bhead\"><span>BAND</span><span></span><span>SOURCE</span>"
+              "<span>MASTER</span><span>DELTA</span></div>")
 
 
 def against_panel(result: dict) -> str:
-    was = {r["field"]: r for r in (result["before"]["comparison"]).get("rows", [])}
-    rows = []
-    for row in result["after"]["comparison"].get("rows", []):
-        if row["field"].startswith("spectral.band_pct."):
-            continue
-        rows.append(_ab_row(row["field"], was.get(row["field"], {}), row))
-    return (
-        "<div class=\"card\"><div class=\"ch\"><h2>Source against master</h2></div>"
-        "<table class=\"ab\"><thead><tr><th class=\"l\">Field</th><th>Source</th>"
-        "<th>Master</th><th>Delta</th><th></th><th class=\"grp\">Target</th>"
-        "<th class=\"dev\">Off by</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table></div>"
-    )
+    was = {r["field"]: r for r in result["before"]["comparison"].get("rows", [])}
+    rows = "".join(_ab_row(row["field"], was.get(row["field"], {}), row)
+                   for row in result["after"]["comparison"].get("rows", []))
+    return ("<div class=\"card\"><div class=\"ch\"><h3>SOURCE AGAINST MASTER</h3></div>"
+            f"<table>{AB_HEAD}<tbody>{rows}</tbody></table></div>")
 
 
 def bands_panel(result: dict) -> str:
@@ -742,23 +623,19 @@ def bands_panel(result: dict) -> str:
     for source, made in zip(was, now):
         key = f"spectral.band_pct.{measurement.band_key(source['lo_hz'], source['hi_hz'])}"
         one = fields.BY_PATH.get(key)
-        label = one.short if one else key
         decimals = one.decimals if one else 2
         rows.append(
             "<div class=\"bnd\">"
-            f"<span class=\"bl\">{escape(label)}</span>"
-            f"<span class=\"bar2\"><i class=\"sb\" style=\"width:{100.0 * source['pct'] / top:.1f}%\"></i>"
+            f"<span class=\"bl\">{escape(one.short if one else key)}</span>"
+            "<span class=\"bar2\">"
+            f"<i class=\"sb\" style=\"width:{100.0 * source['pct'] / top:.1f}%\"></i>"
             f"<i class=\"mb\" style=\"width:{100.0 * made['pct'] / top:.1f}%\"></i></span>"
-            f"<span class=\"bv s\">{number(source['pct'], decimals)}</span>"
-            f"<span class=\"bv\">{number(made['pct'], decimals)}</span>"
-            f"<span class=\"bd\">{_signed(round(made['pct'] - source['pct'], decimals), decimals)}</span>"
-            "</div>")
-    return (
-        "<div class=\"card\"><div class=\"ch\"><h2>Spectral balance</h2></div>"
-        "<div class=\"bands\"><div class=\"bhead\"><span>Band</span><span></span>"
-        "<span>Source</span><span>Master</span><span>Delta</span></div>"
-        f"{''.join(rows)}</div></div>"
-    )
+            f"<span class=\"n bv\">{number(source['pct'], decimals)}</span>"
+            f"<span class=\"n bv\">{number(made['pct'], decimals)}</span>"
+            f"<span class=\"n bd\">"
+            f"{_signed(round(made['pct'] - source['pct'], decimals), decimals)}</span></div>")
+    return ("<div class=\"card\"><div class=\"ch\"><h3>SPECTRAL BALANCE</h3></div>"
+            f"<div class=\"bands\">{BANDS_HEAD}{''.join(rows)}</div></div>")
 
 
 def _notes(result: dict) -> str:
@@ -777,10 +654,9 @@ def _notes(result: dict) -> str:
         if not (row.get("advisory") or row["verdict"] in (compare.NO_TARGET,
                                                           compare.NOT_MEASURED)):
             continue
-        if not row.get("why"):
-            continue
-        said.append(f"<li><b>{escape(fields.name_of(row['field']))}</b> carries no verdict. "
-                    f"{escape(sentence(row['why']))}.</li>")
+        if row.get("why"):
+            said.append(f"<li><b>{escape(fields.name_of(row['field']))}</b> carries no "
+                        f"verdict. {escape(sentence(row['why']))}.</li>")
 
     held = result["prediction"]
     if held.get("checked"):
@@ -795,59 +671,57 @@ def _notes(result: dict) -> str:
                     + escape("; ".join(parts)) + ". "
                     + ("Every prediction held." if held.get("held")
                        else "Not every prediction held.") + "</li>")
-    return ("<div class=\"card\"><div class=\"ch\"><h2>What it did</h2></div>"
-            f"<div class=\"bands\">{_plan_items(result['plan'])}"
+    return ("<div class=\"card\"><div class=\"ch\"><h3>WHAT IT DID</h3></div>"
+            f"<div class=\"inset\">{_plan_items(result['plan'])}"
             f"<ul class=\"reasons\">{''.join(said)}</ul></div></div>")
 
 
 def master_view(result: dict) -> str:
     """One file: the plan across the top, the two waveforms stacked under it, and the
-    field table beside the spectral balance."""
+    field table beside the spectral balance. The frame is docs/master-view.html."""
     name = Path(result["input"]).name
     return (
-        card("Plan", plan_strip(result),
-             f"{name} into {Path(result['output']).parent}")
-        + "<div class=\"card\">"
-        + _side("source", result["before"], False)
-        + _side("master", result["after"], True)
+        "<div class=\"mv\">"
+        "<div class=\"card\"><div class=\"ch\"><h3>PLAN</h3>"
+        f"<span class=\"where\">{escape(name)}</span></div>{plan_strip(result)}</div>"
+        "<div class=\"card\">"
+        + _side("SOURCE", result["before"], False)
+        + _side("MASTER", result["after"], True)
         + "</div>"
-        + f"<div class=\"split\">{against_panel(result)}{bands_panel(result)}</div>"
-        + _notes(result)
+        f"<div class=\"split\">{against_panel(result)}{bands_panel(result)}</div>"
+        + _notes(result) + "</div>"
     )
 
 
 def waiting_view(name: str) -> str:
     """The same shape with nothing in it yet, so the page does not jump when the run
     lands. Every card here is the size of the card that replaces it."""
-    empty_rows = "".join(
-        "<tr><td class=\"fld\"></td><td></td><td></td><td class=\"d\"></td>"
-        "<td class=\"u\"></td><td class=\"t grp\"></td><td class=\"dev\"></td></tr>"
-        for _ in range(8))
-    empty_bands = "".join("<div class=\"bnd\"><span class=\"bl\"></span>"
-                          "<span class=\"bar2\"></span><span class=\"bv\"></span>"
-                          "<span class=\"bv\"></span><span class=\"bd\"></span></div>"
-                          for _ in range(10))
-    cells = "".join(_plan_cell(label, number(None, 2), quiet=label in ("predicted", "measured"))
-                    for label in ("gain", "low cut", "ceiling", "limiter", "reduction",
-                                  "predicted", "measured"))
+    cells = "".join(
+        f"<div class=\"pc{' q' if one in QUIET_CELLS else ''}\"><span>{one}</span>"
+        f"<b>{number(None, 2)}</b></div>" for one in PLAN_CELLS)
+    rows = "".join("<tr><td class=\"fld\">&nbsp;</td><td class=\"n\"></td>"
+                   "<td class=\"n\"></td><td class=\"n d\"></td><td class=\"u\"></td>"
+                   "<td class=\"t\"></td><td class=\"n dev\"></td></tr>"
+                   for _ in range(9))
+    bands = "".join("<div class=\"bnd\"><span class=\"bl\">&nbsp;</span>"
+                    "<span class=\"bar2\"></span><span class=\"n bv\"></span>"
+                    "<span class=\"n bv\"></span><span class=\"n bd\"></span></div>"
+                    for _ in range(10))
     return (
-        "<div class=\"card hold\"><div class=\"ch\"><h2>Plan</h2>"
-        f"<span class=\"where\">{escape(name)}</span></div>"
-        f"<div class=\"plan\">{cells}</div></div>"
-        "<div class=\"card hold\">"
-        "<div class=\"wv hold\"><div class=\"wh\"><b class=\"s\">source</b></div>"
+        "<div class=\"mv hold\">"
+        "<div class=\"card\"><div class=\"ch\"><h3>PLAN</h3>"
+        f"<span class=\"where\">{escape(name)}</span></div><div class=\"plan\">{cells}"
+        "</div></div>"
+        "<div class=\"card\">"
+        "<div class=\"wv\"><div class=\"wh\"><b class=\"s\">SOURCE</b></div>"
         + _wave([], False) + "</div>"
-        "<div class=\"wv hold\"><div class=\"wh\"><b class=\"m\">master</b></div>"
+        "<div class=\"wv\"><div class=\"wh\"><b class=\"m\">MASTER</b></div>"
         + _wave([], True) + "</div></div>"
         "<div class=\"split\">"
-        "<div class=\"card hold\"><div class=\"ch\"><h2>Source against master</h2></div>"
-        "<table class=\"ab\"><thead><tr><th class=\"l\">Field</th><th>Source</th>"
-        "<th>Master</th><th>Delta</th><th></th><th class=\"grp\">Target</th>"
-        f"<th class=\"dev\">Off by</th></tr></thead><tbody>{empty_rows}</tbody></table></div>"
-        "<div class=\"card hold\"><div class=\"ch\"><h2>Spectral balance</h2></div>"
-        "<div class=\"bands\"><div class=\"bhead\"><span>Band</span><span></span>"
-        "<span>Source</span><span>Master</span><span>Delta</span></div>"
-        f"{empty_bands}</div></div></div>"
+        "<div class=\"card\"><div class=\"ch\"><h3>SOURCE AGAINST MASTER</h3></div>"
+        f"<table>{AB_HEAD}<tbody>{rows}</tbody></table></div>"
+        "<div class=\"card\"><div class=\"ch\"><h3>SPECTRAL BALANCE</h3></div>"
+        f"<div class=\"bands\">{BANDS_HEAD}{bands}</div></div></div></div>"
     )
 
 
@@ -855,38 +729,32 @@ def mastering_view(job: dict) -> str:
     """A run in progress or a run that finished, in one view. While it works the page
     reloads itself, so what is on screen is what has actually been written."""
     if job.get("refused"):
-        return ("<div class=\"card\"><div class=\"ch\"><h2>Not started</h2></div>"
-                f"<div class=\"bands\"><p>{escape(sentence(job['refused']))}.</p></div></div>")
-
+        return said("Not started", sentence(job["refused"]) + ".")
     if job.get("failure"):
-        return ("<div class=\"card\"><div class=\"ch\"><h2>Stopped</h2></div>"
-                "<div class=\"bands\"><p>The run stopped on an error.</p>"
-                f"<pre>{escape(job['failure'])}</pre></div></div>")
+        return card("Stopped", "<div class=\"inset\"><p>The run stopped on an error.</p>"
+                    f"<pre>{escape(job['failure'])}</pre></div>")
 
     done, failed = job["done"], job["failed"]
     arrived = sum(1 for one in done if one["reached"]["arrived"])
     if job["running"]:
         at = job.get("at") or ""
         of = f" of {job['total']}" if job["total"] else ""
-        said = (f"{job['finished']}{of} finished, {arrived} inside the target. "
+        told = (f"{job['finished']}{of} finished, {arrived} inside the target. "
                 + (f"Working on {escape(at)}. " if at else "")
                 + "This page keeps itself up to date.")
     else:
-        said = (f"{len(done)} file" + ("" if len(done) == 1 else "s") +
+        told = (f"{len(done)} file" + ("" if len(done) == 1 else "s") +
                 f" written, {arrived} of them inside the target on loudness and true peak.")
 
-    head = ("<div class=\"card\"><div class=\"ch\">"
-            f"<h2>{'Mastering' if job['running'] else 'Mastered'} "
-            f"{escape(str(job['what']))}</h2>"
-            f"<span class=\"where\">{escape(str(job['out_dir']))}</span></div>"
-            f"<div class=\"bands\"><p>{said}</p>{key()}</div></div>")
-
+    head = card("Mastering" if job["running"] else "Mastered",
+                f"<div class=\"inset\"><p>{told}</p>{key()}</div>",
+                str(job["out_dir"]))
     refused = ""
     if failed:
         items = "".join(f"<li><b>{escape(one['name'])}</b> {escape(sentence(one['why']))}.</li>"
                         for one in failed)
-        refused = ("<div class=\"card\"><div class=\"ch\"><h2>Not mastered</h2></div>"
-                   f"<div class=\"bands\"><ul class=\"reasons\">{items}</ul></div></div>")
+        refused = card("Not mastered",
+                       f"<div class=\"inset\"><ul class=\"reasons\">{items}</ul></div>")
 
     blocks = "".join(master_view(one) for one in done)
     if job["running"]:

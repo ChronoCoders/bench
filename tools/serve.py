@@ -84,6 +84,11 @@ def out_dir_for(path: Path) -> Path:
     return path.parent / MASTERED_FOLDER
 
 
+# The last thing measured, so opening the page lands on something rather than on an
+# empty card. It is one selection for the whole process, which is what a bench with one
+# person in front of it has.
+LAST: dict[str, str] = {}
+
 JOBS: dict[str, dict] = {}
 JOBS_LOCK = threading.Lock()
 
@@ -146,20 +151,42 @@ def targets() -> list[str]:
 
 
 def writes_into(root: Path, what: str) -> str:
-    """Where Master would put it, shown before the button is pressed rather than after."""
+    """Where Master would put it, shown before the button is pressed rather than after,
+    and written the way the picker writes things: from the folder being served."""
     if not what:
         return ""
     path = (root / what.rstrip("/")).resolve()
     if not str(path).startswith(str(root)) or not path.exists():
         return ""
-    return str(out_dir_for(path))
+    out = out_dir_for(path)
+    try:
+        return str(out.relative_to(root)) + "/"
+    except ValueError:
+        return str(out)
+
+
+def opening(root: Path, what: str, target_name: str) -> tuple[str, str]:
+    """What to show when nothing was asked for: the last thing measured, or the first
+    thing in the picker with the first target."""
+    if what:
+        return what, target_name
+    offered, named = choices(root), targets()
+    # Only if it is still there. A remembered choice is a path, and a path that has
+    # been moved or renamed would otherwise be measured on every bare visit.
+    remembered = LAST.get("what")
+    what = remembered if remembered in offered else (offered[0] if offered else "")
+    if not target_name or target_name == NONE:
+        held = LAST.get("target")
+        target_name = held if held in named else (named[0] if named else NONE)
+    return what, target_name
 
 
 def render(root: Path, what: str, target_name: str) -> str:
+    what, target_name = opening(root, what, target_name)
     head = page.controls(choices(root), targets(), what, target_name, writes_into(root, what))
     if not what:
         return page.document("Bench", head + page.said(
-            "Nothing chosen", "Choose a file or a folder, then measure."))
+            "Nothing to measure", "This folder holds no audio the bench can read."))
 
     chosen = None
     if target_name and target_name != NONE:
@@ -170,6 +197,7 @@ def render(root: Path, what: str, target_name: str) -> str:
         return page.document("Bench", head + page.said(
             "Refused", "That path is outside the folder being served."))
 
+    LAST["what"], LAST["target"] = what, target_name
     if path.is_dir():
         sheet = folder.measure(path, chosen)
         return page.document(path.name or "Folder", head + page.folder_view(sheet))
