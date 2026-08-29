@@ -55,6 +55,11 @@ def get(url):
         return reply.status, reply.read().decode("utf-8")
 
 
+def headers(url):
+    with urllib.request.urlopen(url, timeout=30) as reply:
+        return dict(reply.headers)
+
+
 def post(base, what, target):
     body = urllib.parse.urlencode({"what": what, "target": target}).encode("utf-8")
     with urllib.request.urlopen(f"{base}{serve.page.MASTER_URL}", body, timeout=30) as reply:
@@ -70,6 +75,23 @@ def until_finished(base, url):
             return status, html
         time.sleep(1.0)
     raise AssertionError(f"still working after {WAIT_S} seconds")
+
+
+def test_no_page_is_held_by_the_browser(album, serving):
+    """Every page here is built from files that change under it, and a run in progress
+    asks for itself again every few seconds. A held copy is showing yesterday."""
+    _, where, _ = post(serving, "album/", serve.NONE)
+    for url in (f"{serving}/", f"{serving}/?what=album/&target={TARGET}", where):
+        assert headers(url).get("Cache-Control") == serve.NO_CACHE, url
+
+
+def test_the_faces_are_still_allowed_to_be_held(serving):
+    """The control on the one above. A woff2 that is never cached is fetched on every
+    page load, and those are the only bytes here that do not change."""
+    from bench import typeface
+    name = typeface.files()[0]
+    held = headers(f"{serving}{typeface.FONT_URL}/{name}").get("Cache-Control")
+    assert held and held != serve.NO_CACHE, held
 
 
 def test_mastering_is_offered_on_the_page(serving):

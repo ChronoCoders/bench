@@ -20,6 +20,11 @@ TARGETS = Path(__file__).resolve().parent.parent / "targets"
 DEFAULT_PORT = 8731
 NONE = "none"
 
+# The page is built from files that change under it, and a run in progress asks for
+# itself again every few seconds. A browser holding any of that is showing yesterday.
+HTML = "text/html; charset=utf-8"
+NO_CACHE = "no-store"
+
 MASTERED_SUFFIX = " (Mastered)"
 MASTERED_FOLDER = "Mastered"
 BODY_LIMIT = 4096
@@ -227,7 +232,7 @@ def handler_for(root: Path):
             target_name = query.get("target", [NONE])[0]
             if route == page.MASTER_URL:
                 body, status = mastering(root, query.get("job", [""])[0])
-                self.send_bytes(status, "text/html; charset=utf-8", body.encode("utf-8"))
+                self.send_bytes(status, HTML, body.encode("utf-8"), NO_CACHE)
                 return
             try:
                 body, status = render(root, what, target_name), 200
@@ -242,7 +247,7 @@ def handler_for(root: Path):
                                      + "<h2>Failed</h2><pre>"
                                      + traceback.format_exc().replace("<", "&lt;") + "</pre>")
                 status = 500
-            self.send_bytes(status, "text/html; charset=utf-8", body.encode("utf-8"))
+            self.send_bytes(status, HTML, body.encode("utf-8"), NO_CACHE)
 
         def log_message(self, fmt, *args):
             sys.stderr.write(f"{self.address_string()} {fmt % args}\n")
