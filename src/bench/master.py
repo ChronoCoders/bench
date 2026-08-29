@@ -346,22 +346,20 @@ def plan(measured: dict, target: dict, filtered: dict | None = None,
     bound = target["fields"][LOUDNESS_FIELD]
     high = bound.get("high")
     placed = compare.verdict(lufs, lufs_unit, bound)
-    if placed == compare.INSIDE:
-        refused.append({
-            "correction": "gain",
-            "why": f"{lufs} LUFS is already inside {low} to {high} once the {lufs_unit} "
-                   "this measurement can resolve is counted. A file inside its target "
-                   "does not get moved to the edge of it.",
-        })
-        return _finish(steps, refused, lufs, peak, 0.0)
 
     ceiling, section = _bound(target, PEAK_FIELD, "max")
     if ceiling is None:
         ceiling, section = FULL_SCALE_DBTP, "full scale, because the target declares no ceiling"
     aim = ceiling - clearance(PEAK_FIELD, peak_unit)
-    # Toward the near edge of the range, not always the bottom of it.
+
+    # Where the loudness should end up. A file already inside the range ends up where it
+    # is: it is not moved to the edge of a target it is in the middle of. That is a
+    # statement about loudness and about nothing else. The ceiling is not conditional on
+    # it, and a file over the ceiling comes under it whether or not it wants loudness.
     room = clearance(LOUDNESS_FIELD, lufs_unit)
-    if high is not None and lufs > (low + high) / 2.0:
+    if placed == compare.INSIDE:
+        aim_loud, edge = lufs, f"{lufs}, where it already is, inside {low} to {high}"
+    elif high is not None and lufs > (low + high) / 2.0:
         aim_loud, edge = high - room, f"{high}, the top of the range, less {round(room, 4)}"
     else:
         aim_loud, edge = low + room, f"{low}, the bottom of the range, plus {round(room, 4)}"
@@ -377,6 +375,15 @@ def plan(measured: dict, target: dict, filtered: dict | None = None,
     else:
         gain, bound_by = want_room, "the ceiling"
         shortfall = round(want_loud - want_room, 3)
+
+    if abs(gain) <= lufs_unit and limiting is None:
+        refused.append({
+            "correction": "gain",
+            "why": f"{lufs} LUFS is inside {low} to {high} and {peak} dBTP is already "
+                   f"under {ceiling}, so neither the target nor the ceiling asks for "
+                   "anything",
+        })
+        return _finish(steps, refused, lufs, peak, 0.0)
 
     steps.append({
         "correction": "gain",

@@ -530,8 +530,8 @@ MUTANTS = (
         "reach mastering with a link instead of a post",
         "following a link would then write files, and a reload would write them again",
         PAGE,
-        '        f"<button type=\\"submit\\" formmethod=\\"post\\" formaction=\\"{MASTER_URL}\\">Master</button>"',
-        '        f"<button type=\\"submit\\" formaction=\\"{MASTER_URL}\\">Master</button>"',
+        '        f"<button class=\\"go\\" type=\\"submit\\" formmethod=\\"post\\" "',
+        '        f"<button class=\\"go\\" type=\\"submit\\" "',
     ),
     Mutant(
         "let the page that is working sit still",
@@ -555,11 +555,19 @@ MUTANTS = (
         "        return path",
     ),
     Mutant(
+        "let being inside the loudness range skip the ceiling",
+        "entry 35: a file at -0.3 dBTP against a -1.0 ceiling then has nothing applied",
+        MASTER,
+        "    if placed == compare.INSIDE:\n        aim_loud, edge = lufs,",
+        "    if placed == compare.INSIDE:\n        return _finish(steps, "
+        "refused, lufs, peak, 0.0)\n        aim_loud, edge = lufs,",
+    ),
+    Mutant(
         "start a run with no target chosen",
         "every correction is derived from the distance to one, so there is nothing to do",
         SERVE,
-        "    if not target_name or target_name == NONE:",
-        "    if False:",
+        '    if not target_name or target_name == NONE:\n        return ("no target is chosen, and every correction here is derived from the "',
+        '    if False:\n        return ("no target is chosen, and every correction here is derived from the "',
     ),
 )
 

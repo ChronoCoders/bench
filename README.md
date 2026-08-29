@@ -82,7 +82,7 @@ per file.
 
 ## measuring.md
 
-32 write ups of measurements that were wrong, or of claims about them that
+35 write ups of measurements that were wrong, or of claims about them that
 were. Every one passed its own check at the time. It is the most useful file here.
 
 A peak read as decibels when it was linear amplitude, which said a master was under the
@@ -109,7 +109,7 @@ Then open http://127.0.0.1:8731
 
 ## Tests
 
-302 tests. Every measurement claim has a control that can fail, and a negative control
+318 tests. Every measurement claim has a control that can fail, and a negative control
 proving the check has teeth. The rig raises a distinct error when an assertion accepts
 something it was supposed to reject.
 
@@ -118,8 +118,8 @@ python -m pytest
 python tools/mutate.py
 ```
 
-The mutation tool breaks the code 62 ways and checks the suite notices, working on a
-copy of the tree rather than the tree itself. All 62 are caught. It has found faults a
+The mutation tool breaks the code 63 ways and checks the suite notices, working on a
+copy of the tree rather than the tree itself. All 63 are caught. It has found faults a
 green suite cannot, and seven of the ledger entries came from it, including three tests
 that were passing for reasons unrelated to what they were written for.
 

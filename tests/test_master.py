@@ -27,6 +27,7 @@ RANGE_WIDTH_LU = 6.0
 PUSH_LU = 1.0
 CEILING = -1.0
 INPUT_PEAK_DBTP = -1.5
+OVER_THE_CEILING = -0.3
 SECONDS = 6.0
 SUB_HZ = 8.0
 SUB_AMP = 0.03
@@ -288,7 +289,44 @@ def test_no_gain_when_the_file_is_already_inside_the_range(tmp_path):
     built = master.plan(measured, target_around(measured, bands=False,
                                                 low=round(here - RANGE_WIDTH_LU / 2.0, 3)))
     assert master.step(built, "gain") is None
-    assert "already inside" in refusal(built, "gain")
+    assert "neither the target nor the ceiling asks for anything" in refusal(built, "gain")
+
+
+def test_a_file_over_the_ceiling_comes_under_it_with_the_loudness_already_inside(tmp_path):
+    """The ceiling is not conditional on the gain. Being inside the loudness range says
+    nothing about the peak, and a file over the ceiling comes under it either way."""
+    measured = measurement.of_file(source(tmp_path, peak=OVER_THE_CEILING))
+    here = compare.dig(measured, master.LOUDNESS_FIELD)
+    target = target_around(measured, bands=False,
+                           low=round(here - RANGE_WIDTH_LU / 2.0, 3))
+    built = master.plan(measured, target)
+    gain = master.step(built, "gain")
+    assert gain is not None, "nothing was applied to a file over the ceiling"
+    assert gain["bound_by"] == "the ceiling"
+    assert gain["db"] < 0.0, "it has to come down"
+
+
+def test_that_file_really_is_inside_its_loudness_range(tmp_path):
+    """The control on the one above. If it were outside on loudness too, the gain would
+    have been asked for by the loudness and the ceiling would prove nothing."""
+    measured = measurement.of_file(source(tmp_path, peak=OVER_THE_CEILING))
+    here = compare.dig(measured, master.LOUDNESS_FIELD)
+    target = target_around(measured, bands=False,
+                           low=round(here - RANGE_WIDTH_LU / 2.0, 3))
+    row = next(r for r in compare.against(measured, target)["rows"]
+               if r["field"] == master.LOUDNESS_FIELD)
+    assert row["verdict"] == compare.INSIDE
+    assert compare.dig(measured, master.PEAK_FIELD) > CEILING
+
+
+def test_it_writes_a_file_that_is_under_the_ceiling(tmp_path):
+    measured = measurement.of_file(source(tmp_path, peak=OVER_THE_CEILING))
+    here = compare.dig(measured, master.LOUDNESS_FIELD)
+    result = master.run(source(tmp_path, name="over.wav", peak=OVER_THE_CEILING),
+                        target_around(measured, low=round(here - RANGE_WIDTH_LU / 2.0, 3)),
+                        tmp_path / "out")
+    landed = result["reached"]["fields"][master.PEAK_FIELD]
+    assert landed["verdict"] == compare.INSIDE, landed
 
 
 def test_a_file_above_its_range_is_brought_to_the_top_and_not_the_bottom(tmp_path):

@@ -818,6 +818,26 @@ So it stays as it was, on one file's evidence against it, which is exactly the s
 
 The lesson is about objectives rather than controls. Entry 27 was a criterion no setting could fail, which chose nothing and said so loudly. This is quieter: a criterion every setting can fail, ranked by a quantity whose best value is at a setting nobody would want. **A grid can hide a degenerate objective by never offering it what it really wants.**
 
+### 35. A fix that made one rule conditional on another
+
+Entry 30 records a gain that turned down files already inside their target: it computed the distance to the bottom of the range whatever the file measured, so a track sitting in the middle would have been pulled to the edge of it. The fix refused the gain when the loudness was already inside.
+
+The refusal returned before the ceiling had been looked at.
+
+`Crown me now.wav` measures -9.497 LUFS, inside boom bap's -9.734 to -8.434, and -0.3 dBTP against a -1.0 ceiling. The run applied nothing at all. A file 0.7 dB over the ceiling came back untouched, and the report said the loudness was fine, which it was.
+
+The two rules are not connected. The target range is a statement about loudness. The ceiling is a delivery limit on the peak, and a file over it comes under it whether or not it wants loudness. What entry 30 established is only that the loudness should not be moved, and the way to say that is to aim the loudness at where it already is rather than to stop planning.
+
+So the aim is now the measured loudness when the file is inside its range, and the ceiling clamps the gain as it does for every other file. On that track it takes 0.95 dB off, bound by the ceiling, which puts the peak at -1.25 dBTP and the loudness at -10.45, out of the bottom of the range by 0.7. That is a real conflict rather than a hidden one: the shortfall is reported and the limiter is asked to recover it, which is the same path a file that is too quiet takes.
+
+The gain is refused now only when neither rule asks for anything, and it says both: this loudness is inside that range and this peak is under that ceiling.
+
+**A fix that stops one thing happening by returning early stops everything after it happening too.** The refusal in entry 30 was correct about the gain and silently authoritative about the ceiling, the limiter and the prediction, none of which it had been asked about. The narrower form, which is the one that survives, changes the aim rather than the control flow.
+
+Two tests hold it. A file inside its loudness range and over the ceiling gets a negative gain bound by the ceiling, and the control beside it asserts that the file really is inside its range, because if it were outside on loudness too the gain would have been asked for by the loudness and the ceiling would prove nothing. A third runs it end to end and requires the written file to be inside the ceiling.
+
+There is a shape here worth carrying. Every one of the six faults in entry 26 and the three in entry 33 was found by measuring. This one was found by someone opening the page and reading a plan that had nothing in it. **A report that says what it did not do, and why, is what made it findable at all**: the plan named its own refusal in the words of the rule that refused, and the words were about loudness while the number on screen was a peak.
+
 ## Standing warning: where target numbers come from
 
 Measurements taken before 2026-08-26 in other sessions were mostly made with
