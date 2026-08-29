@@ -896,6 +896,34 @@ among the fields fails it. This one was found by someone reading the page, which
 the second in a row: entry 35 was found the same way, and both were in what the page
 said rather than in what it measured.
 
+### 37. A test fixture living in the folder the shipped targets live in
+
+The mutation tool checks the suite is green before it mutates anything. It reported
+`test_every_shipped_target_says_what_it_rests_on` failing on a target the repository
+does not hold.
+
+The `album` fixture in the serving tests writes a small target and deletes it
+afterwards, and it was writing it into `targets/`, beside `boom-bap.json` and
+`guaracha-club.json`. A serving run was going while the mutation tool copied the
+repository, so the copy caught the fixture's file mid-life and read it as shipped. It
+has `evidence.n` of 1 and no sources, which is exactly what the test refuses, and the
+test was right to refuse it.
+
+The two ways this shows up are the same fault. A second run alongside the first sees
+it, and a run that is killed before teardown leaves it there for the next one. Either
+way something the bench does not ship is sitting where everything reads targets from.
+
+The fixture now writes into a folder of its own and points `serve.TARGETS` at it, so
+there is nothing to clean up and nothing to leak. The teardown that deleted the file
+is gone with it.
+
+**A test that writes into a folder the program reads as authoritative is not isolated,
+however carefully it tidies up.** Tidying up runs last, and the two cases that matter
+are the ones where something else reads first or nothing runs last.
+
+Nothing here says a shipped target was ever wrong. The check held, which is why this
+was visible at all, and the file it caught was never one of the two.
+
 ### The quoted figure that the measurement contradicted
 
 The boom bap profile was asked for on a stated premise: that the style carries a

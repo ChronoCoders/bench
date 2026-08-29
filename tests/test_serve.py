@@ -24,12 +24,16 @@ from bench import compare, master, measurement
 SHORT_S = 4.0
 WAIT_S = 180.0
 TARGET = "_serving-test"
-TARGETS = Path(__file__).resolve().parent.parent / "targets"
 
 
 @pytest.fixture
-def album(tmp_path):
-    """Two short tracks in a folder, and a target they are outside on loudness."""
+def album(tmp_path, monkeypatch):
+    """Two short tracks in a folder, and a target they are outside on loudness.
+
+    The target goes in a folder of its own. Writing it into the shipped targets/ puts
+    a file the bench does not ship where everything else reads from, and a run that is
+    killed, or a second run alongside this one, finds it there and reads it as real.
+    """
     where = tmp_path / "album"
     where.mkdir()
     x = music.limit(music.build("with_bass", 120.0, seconds=SHORT_S), drive=4.0)
@@ -38,7 +42,10 @@ def album(tmp_path):
 
     measured = measurement.of_file(where / "one.wav")
     here = compare.dig(measured, master.LOUDNESS_FIELD)
-    written = TARGETS / f"{TARGET}.json"
+    held = tmp_path / "targets"
+    held.mkdir()
+    monkeypatch.setattr(serve, "TARGETS", held)
+    written = held / f"{TARGET}.json"
     written.write_text(json.dumps({
         "name": "serving test", "band_set": measured["spectral"]["band_set"],
         "evidence": {"n": 1},
@@ -47,7 +54,6 @@ def album(tmp_path):
         "limits": {master.PEAK_FIELD: {"max": -1.0, "declared_by": "test"}},
     }), encoding="utf-8")
     yield where
-    written.unlink()
 
 
 def get(url):
