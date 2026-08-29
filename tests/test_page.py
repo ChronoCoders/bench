@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import music
 import signals as sig
@@ -301,8 +302,8 @@ def test_a_finished_run_counts_what_arrived():
     done[1]["reached"]["arrived"] = False
     html = page.mastering_view(working(running=False, done=done))
     assert "2 files written, 1 of them inside the target" in html
-    assert html.count("<h3>Plan</h3>") == 2, "one block per file"
-    assert html.count("<h3>Spectral balance</h3>") == 2
+    assert html.count("<h2>Plan</h2>") == 2, "one block per file"
+    assert html.count("<h2>Spectral balance</h2>") == 2
 
 
 def test_a_file_it_would_not_master_is_named_with_the_reason():
@@ -323,3 +324,45 @@ def test_the_instrument_is_named_once():
         assert "instrument instrument" not in html
         assert "instrument instrument" not in text
         assert named in html and named in text
+
+
+# One frame, every view. Measure and master should not look like two different
+# programs, and that is countable rather than a matter of taste.
+
+def panels(html):
+    return re.findall(r'<div class="card[^"]*"><div class="ch"><h2>([^<]*)</h2>', html)
+
+
+def three_views(tmp_path):
+    from bench import folder
+    out = tmp_path / "album"
+    out.mkdir()
+    base = music.limit(music.build("dense", 128.0, seconds=6.0))
+    for i, scale in enumerate((1.0, 0.5)):
+        sig.write(out / f"{i}.wav", base * scale)
+    targets = Path(__file__).resolve().parent.parent / "targets"
+    target = compare.load(targets / "boom-bap.json")
+    one = measurement.of_file(out / "0.wav")
+    return {
+        "folder": page.folder_view(folder.measure(out, target)),
+        "file": page.file_view(one, compare.against(one, target), target),
+        "master": page.master_view(mastered_result([compare.INSIDE, compare.INSIDE])),
+    }
+
+
+def test_every_panel_on_every_view_is_the_same_card(tmp_path):
+    """Nothing sits outside the frame on any of them. The one card with no header is
+    the pair of waveforms, where the rows carry their own labels."""
+    for name, html in three_views(tmp_path).items():
+        assert html.startswith('<div class="card'), f"{name} opens outside a card"
+        assert panels(html), f"{name} has no panels at all"
+        assert html.count('<div class="card') - html.count('<div class="ch">') <= 1, name
+
+
+def test_no_view_keeps_a_heading_of_its_own(tmp_path):
+    """The control on the one above. Two of these used to open with their own title
+    outside any card, which is what made them look like a different program."""
+    for name, html in three_views(tmp_path).items():
+        assert "<h1" not in html, name
+        assert 'class="head"' not in html, name
+        assert "<h3" not in html, f"{name} skips a heading level"

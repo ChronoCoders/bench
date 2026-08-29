@@ -82,7 +82,16 @@ def test_no_page_is_held_by_the_browser(album, serving):
     asks for itself again every few seconds. A held copy is showing yesterday."""
     _, where, _ = post(serving, "album/", serve.NONE)
     for url in (f"{serving}/", f"{serving}/?what=album/&target={TARGET}", where):
-        assert headers(url).get("Cache-Control") == serve.NO_CACHE, url
+        sent = headers(url)
+        assert sent.get("Cache-Control") == serve.NO_CACHE, url
+        assert sent.get("Pragma") == "no-cache", url
+
+
+def test_the_replies_say_http_1_1(serving):
+    """Cache-Control arrived with 1.1. A cache reading a 1.0 reply may ignore it and
+    guess a freshness lifetime, which is a stale page nobody asked for."""
+    with urllib.request.urlopen(f"{serving}/", timeout=30) as reply:
+        assert reply.version == 11, reply.version
 
 
 def test_the_faces_are_still_allowed_to_be_held(serving):
@@ -127,7 +136,7 @@ def test_it_masters_a_folder_and_shows_the_before_and_after(album, serving, tmp_
     status, html = until_finished(serving, where)
     assert status == 200
     assert "2 files written" in html
-    assert html.count("<h3>Plan</h3>") == 2, "one block per file"
+    assert html.count("<h2>Plan</h2>") == 2, "one block per file"
 
     out = tmp_path / ("album" + serve.MASTERED_SUFFIX)
     assert sorted(p.name for p in out.iterdir()) == ["one.wav", "two.wav"]
@@ -175,3 +184,20 @@ def test_an_unknown_run_is_not_a_crash(serving):
     with pytest.raises(urllib.error.HTTPError) as refused:
         get(f"{serving}{serve.page.MASTER_URL}?job=nothing")
     assert refused.value.code == 404
+
+def test_every_page_the_server_hands_over_is_framed(album, serving):
+    """The complaint that started this: the page you land on has to be the new one.
+    Every state, not only the one with a table in it."""
+    _, refused, _ = post(serving, "album/", serve.NONE)
+    for name, url in (("landing", f"{serving}/"),
+                      ("outside the root", f"{serving}/?what=../..&target={TARGET}"),
+                      ("no such run", f"{serving}{serve.page.MASTER_URL}?job=nothing"),
+                      ("refused to start", refused)):
+        try:
+            _, html = get(url)
+        except urllib.error.HTTPError as sent:
+            html = sent.read().decode("utf-8")
+        body = html[html.index("<main>"):]
+        assert '<div class="card' in body, f"{name} has no card"
+        assert "<h1" not in body and "class=\"head\"" not in body, name
+        assert body.index('<div class="card') < body.index("</main>"), name

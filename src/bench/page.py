@@ -5,7 +5,6 @@ No request leaves the page. Fonts are the ones already on the machine.
 
 from __future__ import annotations
 
-import os
 from html import escape
 from pathlib import Path
 
@@ -30,9 +29,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 main { max-width: 1240px; margin: 0 auto; padding: 26px 22px 80px; }
-h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.01em; }
-h2 { font-size: 11px; font-weight: 600; margin: 30px 0 10px;
-     text-transform: uppercase; letter-spacing: 0.11em; color: var(--dim); }
 p { margin-bottom: 10px; color: var(--dim); max-width: 62em; }
 .controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
             padding: 13px 15px; border: 1px solid var(--edge); border-radius: 9px;
@@ -93,9 +89,6 @@ tr.spread td:hover, tr.over td:hover { background: none; }
 .tag { display: inline-block; font-size: 9px; letter-spacing: 0.09em; text-transform: uppercase;
        color: var(--faint); border: 1px solid var(--edge); border-radius: 2px;
        padding: 1px 5px; margin-left: 6px; vertical-align: 1px; }
-.head { display: flex; justify-content: space-between; align-items: baseline;
-        gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
-.head .meta { color: var(--faint); font-size: 12px; font-family: var(--mono); }
 .key { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: var(--dim);
        margin-top: 10px; margin-bottom: 4px; }
 .key .unmarked { color: var(--faint); }
@@ -118,7 +111,7 @@ svg { display: block; width: 100%; height: auto; }
         margin-bottom: 16px; }
 .ch { display: flex; align-items: baseline; gap: 16px; padding: 12px 15px 11px;
       border-bottom: 1px solid var(--edge-soft); }
-.ch h3 { font-size: 9px; letter-spacing: 0.26em; color: var(--dim); font-weight: 500;
+.ch h2 { font-size: 9px; letter-spacing: 0.26em; color: var(--dim); font-weight: 500;
          text-transform: uppercase; margin: 0; }
 .ch .where { margin-left: auto; font-family: var(--mono); font-size: 11px;
              color: var(--faint); text-align: right; }
@@ -194,6 +187,11 @@ table.ab tbody tr:hover td { background: var(--panel-hi); }
 .bd { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11.5px;
       color: var(--faint); }
 .hold, .hold b, .hold .bv, .hold .bd { color: var(--faint); }
+.card .wrap, .card .inset { padding: 6px 15px 13px; }
+.card .inset p:last-child, .card .inset ul:last-child { margin-bottom: 0; }
+.card .inset .key { margin: 2px 0 0; }
+.card .inset .reasons li:last-child { border-bottom: none; padding-bottom: 0; }
+.card .plot { background: none; border: none; border-radius: 0; padding: 6px 15px 8px; }
 """
 
 VERDICT_CLASS = {
@@ -218,6 +216,21 @@ def document(title: str, body: str, again_in: int | None = None) -> str:
         f"<style>{typeface.css()}</style><style>{STYLE}</style></head>"
         f"<body><main>{body}</main></body></html>\n"
     )
+
+
+def said(title: str, text: str, where: str = "") -> str:
+    """A card with a sentence in it. Every state this app can be in is framed, including
+    the ones that are only a sentence: nothing here is bare text on an empty page."""
+    return card(title, f"<div class=\"inset\"><p>{escape(text)}</p></div>", where)
+
+
+def card(title: str, body: str, where: str = "") -> str:
+    """The frame every panel on every view sits in. It holds nothing of its own: what
+    goes inside it is the same table, with the same numbers and the same verdicts, as
+    before there was a frame."""
+    aside = f"<span class=\"where\">{escape(where)}</span>" if where else ""
+    return (f"<div class=\"card\"><div class=\"ch\"><h2>{escape(title)}</h2>{aside}</div>"
+            f"{body}</div>")
 
 
 def sentence(text: str) -> str:
@@ -292,11 +305,12 @@ def spectrum(measurement: dict, target: dict | None) -> str:
             f"<text x=\"{x + bar / 2:.1f}\" y=\"{height - 10}\" fill=\"#6b7280\" "
             f"font-size=\"10\" text-anchor=\"middle\">{escape(label)}</text>"
         )
-    return (
-        "<h2>Spectrum</h2><div class=\"plot\">"
-        f"<svg viewBox=\"0 0 {width} {height}\" role=\"img\">{''.join(parts)}</svg></div>"
-        + ("<p class=\"note\">Outlined boxes are the target range for that band.</p>"
-           if target is not None else "")
+    return card(
+        "Spectrum",
+        f"<div class=\"plot\"><svg viewBox=\"0 0 {width} {height}\" role=\"img\">"
+        f"{''.join(parts)}</svg></div>"
+        + ("<div class=\"inset\"><p class=\"note\">Outlined boxes are the target range "
+           "for that band.</p></div>" if target is not None else "")
     )
 
 
@@ -383,18 +397,19 @@ def folder_view(sheet: dict) -> str:
                      f"{escape(sentence(skip['why']))}</li>")
 
     where = Path(sheet["folder"])
-    heading = (f"{escape(str(where.parent) + os.sep)}<b>{escape(where.name)}</b>"
-               if where.name else escape(str(where)))
-    return (
-        f"<div class=\"head\"><h1>{heading}</h1>"
-        f"<span class=\"meta\">{len(sheet['files'])} files</span></div>"
-        + (key() if graded else "")
+    counted = f"{len(sheet['files'])} file" + ("" if len(sheet["files"]) == 1 else "s")
+    table = (
+        (f"<div class=\"inset\">{key()}</div>" if graded else "")
         + "<div class=\"wrap\">"
         + f"<table><thead><tr><th>Track</th>{head}</tr></thead><tbody>{''.join(rows)}</tbody>"
         + f"<tfoot><tr class=\"pause\"><td colspan=\"{len(columns) + 1}\"></td></tr>"
         f"<tr class=\"spread\"><td>Spread</td>{''.join(spread)}</tr>"
         f"<tr class=\"over\"><td>Files</td>{''.join(over)}</tr></tfoot></table></div>"
-        + (f"<ul class=\"reasons\">{''.join(notes)}</ul>" if notes else "")
+    )
+    return (
+        card("Tracks", table, f"{where}, {counted}")
+        + (card("Reasons", f"<div class=\"inset\"><ul class=\"reasons\">"
+                           f"{''.join(notes)}</ul></div>") if notes else "")
     )
 
 
@@ -458,16 +473,17 @@ def comparison_view(result: dict) -> str:
                     " a boundary once the measurement's own uncertainty is counted, "
                     "which is not a pass.")
 
-    return (
-        f"<h2>Against {escape(result['target']['name'])}</h2>"
-        f"<p>Built from {evidence['n']} reference"
+    return card(
+        f"Against {result['target']['name']}",
+        f"<div class=\"inset\"><p>Built from {evidence['n']} reference"
         + ("s" if evidence["n"] != 1 else "") +
         (", all lossy." if evidence.get("all_sources_lossy") else ".") +
-        f" {escape(verdict)}</p>"
-        "<table><thead><tr><th>Field</th><th>Value</th><th>Plus minus</th><th>Target</th>"
-        "<th>Deviation</th><th>Verdict</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table>"
-        + (f"<ul class=\"reasons\">{''.join(gaps)}</ul>" if gaps else "")
+        f" {escape(verdict)}</p></div>"
+        "<div class=\"wrap\"><table><thead><tr><th>Field</th><th>Value</th>"
+        "<th>Plus minus</th><th>Target</th><th>Deviation</th><th>Verdict</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+        + (f"<div class=\"inset\"><ul class=\"reasons\">{''.join(gaps)}</ul></div>"
+           if gaps else "")
     )
 
 
@@ -492,14 +508,14 @@ def octaves(measurement: dict) -> str:
             f"<td>{number(one['occupancy'], 3)}</td>"
             f"<td>{number(one['coverage'], 3)}</td>"
             f"<td>{one['onsets_fitted']}</td></tr>")
-    return (
-        "<h2>Rates the signal also supports</h2>"
-        "<p>Which of these is the beat is a musical judgement, not a property of the "
-        "signal. Occupancy is the share of grid ticks that carry an onset, coverage the "
-        "share of onsets that sit on a tick.</p>"
-        "<table><thead><tr><th>Rate</th><th>Against the reported one</th>"
+    return card(
+        "Rates the signal also supports",
+        "<div class=\"inset\"><p>Which of these is the beat is a musical judgement, not a "
+        "property of the signal. Occupancy is the share of grid ticks that carry an onset, "
+        "coverage the share of onsets that sit on a tick.</p></div>"
+        "<div class=\"wrap\"><table><thead><tr><th>Rate</th><th>Against the reported one</th>"
         "<th>Occupancy</th><th>Coverage</th><th>Onsets fitted</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
     )
 
 
@@ -539,10 +555,11 @@ def file_view(measurement: dict, result: dict | None, target: dict | None) -> st
             missing.append(f"<li><b>{escape(block.title())}</b>: {escape(caveat)}.</li>")
 
     body = (
-        f"<div class=\"head\"><h1>{escape(measurement.get('file', {}).get('name', 'file'))}</h1>"
-        f"<span class=\"meta\">{escape(meta)}</span></div>"
-        f"<h2>Measured</h2><table><tbody>{''.join(rows)}</tbody></table>"
-        + (f"<ul class=\"reasons\">{''.join(missing)}</ul>" if missing else "")
+        card("Measured",
+             f"<div class=\"wrap\"><table><tbody>{''.join(rows)}</tbody></table></div>",
+             meta)
+        + (card("Reasons", f"<div class=\"inset\"><ul class=\"reasons\">"
+                           f"{''.join(missing)}</ul></div>") if missing else "")
         + octaves(measurement)
         + spectrum(measurement, target)
     )
@@ -706,7 +723,7 @@ def against_panel(result: dict) -> str:
             continue
         rows.append(_ab_row(row["field"], was.get(row["field"], {}), row))
     return (
-        "<div class=\"card\"><div class=\"ch\"><h3>Source against master</h3></div>"
+        "<div class=\"card\"><div class=\"ch\"><h2>Source against master</h2></div>"
         "<table class=\"ab\"><thead><tr><th class=\"l\">Field</th><th>Source</th>"
         "<th>Master</th><th>Delta</th><th></th><th class=\"grp\">Target</th>"
         "<th class=\"dev\">Off by</th></tr></thead>"
@@ -737,7 +754,7 @@ def bands_panel(result: dict) -> str:
             f"<span class=\"bd\">{_signed(round(made['pct'] - source['pct'], decimals), decimals)}</span>"
             "</div>")
     return (
-        "<div class=\"card\"><div class=\"ch\"><h3>Spectral balance</h3></div>"
+        "<div class=\"card\"><div class=\"ch\"><h2>Spectral balance</h2></div>"
         "<div class=\"bands\"><div class=\"bhead\"><span>Band</span><span></span>"
         "<span>Source</span><span>Master</span><span>Delta</span></div>"
         f"{''.join(rows)}</div></div>"
@@ -778,7 +795,7 @@ def _notes(result: dict) -> str:
                     + escape("; ".join(parts)) + ". "
                     + ("Every prediction held." if held.get("held")
                        else "Not every prediction held.") + "</li>")
-    return ("<div class=\"card\"><div class=\"ch\"><h3>What it did</h3></div>"
+    return ("<div class=\"card\"><div class=\"ch\"><h2>What it did</h2></div>"
             f"<div class=\"bands\">{_plan_items(result['plan'])}"
             f"<ul class=\"reasons\">{''.join(said)}</ul></div></div>")
 
@@ -788,14 +805,13 @@ def master_view(result: dict) -> str:
     field table beside the spectral balance."""
     name = Path(result["input"]).name
     return (
-        "<div class=\"card\"><div class=\"ch\"><h3>Plan</h3>"
-        f"<span class=\"where\">{escape(name)} into {escape(str(Path(result['output']).parent))}"
-        "</span></div>" + plan_strip(result) + "</div>"
-        "<div class=\"card\">"
+        card("Plan", plan_strip(result),
+             f"{name} into {Path(result['output']).parent}")
+        + "<div class=\"card\">"
         + _side("source", result["before"], False)
-        + _side("master", result["after"], True) +
-        "</div>"
-        f"<div class=\"split\">{against_panel(result)}{bands_panel(result)}</div>"
+        + _side("master", result["after"], True)
+        + "</div>"
+        + f"<div class=\"split\">{against_panel(result)}{bands_panel(result)}</div>"
         + _notes(result)
     )
 
@@ -815,7 +831,7 @@ def waiting_view(name: str) -> str:
                     for label in ("gain", "low cut", "ceiling", "limiter", "reduction",
                                   "predicted", "measured"))
     return (
-        "<div class=\"card hold\"><div class=\"ch\"><h3>Plan</h3>"
+        "<div class=\"card hold\"><div class=\"ch\"><h2>Plan</h2>"
         f"<span class=\"where\">{escape(name)}</span></div>"
         f"<div class=\"plan\">{cells}</div></div>"
         "<div class=\"card hold\">"
@@ -824,11 +840,11 @@ def waiting_view(name: str) -> str:
         "<div class=\"wv hold\"><div class=\"wh\"><b class=\"m\">master</b></div>"
         + _wave([], True) + "</div></div>"
         "<div class=\"split\">"
-        "<div class=\"card hold\"><div class=\"ch\"><h3>Source against master</h3></div>"
+        "<div class=\"card hold\"><div class=\"ch\"><h2>Source against master</h2></div>"
         "<table class=\"ab\"><thead><tr><th class=\"l\">Field</th><th>Source</th>"
         "<th>Master</th><th>Delta</th><th></th><th class=\"grp\">Target</th>"
         f"<th class=\"dev\">Off by</th></tr></thead><tbody>{empty_rows}</tbody></table></div>"
-        "<div class=\"card hold\"><div class=\"ch\"><h3>Spectral balance</h3></div>"
+        "<div class=\"card hold\"><div class=\"ch\"><h2>Spectral balance</h2></div>"
         "<div class=\"bands\"><div class=\"bhead\"><span>Band</span><span></span>"
         "<span>Source</span><span>Master</span><span>Delta</span></div>"
         f"{empty_bands}</div></div></div>"
@@ -839,11 +855,11 @@ def mastering_view(job: dict) -> str:
     """A run in progress or a run that finished, in one view. While it works the page
     reloads itself, so what is on screen is what has actually been written."""
     if job.get("refused"):
-        return ("<div class=\"card\"><div class=\"ch\"><h3>Not started</h3></div>"
+        return ("<div class=\"card\"><div class=\"ch\"><h2>Not started</h2></div>"
                 f"<div class=\"bands\"><p>{escape(sentence(job['refused']))}.</p></div></div>")
 
     if job.get("failure"):
-        return ("<div class=\"card\"><div class=\"ch\"><h3>Stopped</h3></div>"
+        return ("<div class=\"card\"><div class=\"ch\"><h2>Stopped</h2></div>"
                 "<div class=\"bands\"><p>The run stopped on an error.</p>"
                 f"<pre>{escape(job['failure'])}</pre></div></div>")
 
@@ -860,8 +876,8 @@ def mastering_view(job: dict) -> str:
                 f" written, {arrived} of them inside the target on loudness and true peak.")
 
     head = ("<div class=\"card\"><div class=\"ch\">"
-            f"<h3>{'Mastering' if job['running'] else 'Mastered'} "
-            f"{escape(str(job['what']))}</h3>"
+            f"<h2>{'Mastering' if job['running'] else 'Mastered'} "
+            f"{escape(str(job['what']))}</h2>"
             f"<span class=\"where\">{escape(str(job['out_dir']))}</span></div>"
             f"<div class=\"bands\"><p>{said}</p>{key()}</div></div>")
 
@@ -869,7 +885,7 @@ def mastering_view(job: dict) -> str:
     if failed:
         items = "".join(f"<li><b>{escape(one['name'])}</b> {escape(sentence(one['why']))}.</li>"
                         for one in failed)
-        refused = ("<div class=\"card\"><div class=\"ch\"><h3>Not mastered</h3></div>"
+        refused = ("<div class=\"card\"><div class=\"ch\"><h2>Not mastered</h2></div>"
                    f"<div class=\"bands\"><ul class=\"reasons\">{items}</ul></div></div>")
 
     blocks = "".join(master_view(one) for one in done)

@@ -22,6 +22,10 @@ NONE = "none"
 
 # The page is built from files that change under it, and a run in progress asks for
 # itself again every few seconds. A browser holding any of that is showing yesterday.
+# Cache-Control arrived with HTTP/1.1, and a cache reading an HTTP/1.0 reply is entitled
+# to ignore it and guess a freshness lifetime instead, which is what a stale page here
+# turned out to be. So the replies say 1.1, and Pragma is there for anything that only
+# reads 1.0.
 HTML = "text/html; charset=utf-8"
 NO_CACHE = "no-store"
 
@@ -154,7 +158,8 @@ def writes_into(root: Path, what: str) -> str:
 def render(root: Path, what: str, target_name: str) -> str:
     head = page.controls(choices(root), targets(), what, target_name, writes_into(root, what))
     if not what:
-        return page.document("Bench", head + "<p>Choose a file or a folder, then measure.</p>")
+        return page.document("Bench", head + page.said(
+            "Nothing chosen", "Choose a file or a folder, then measure."))
 
     chosen = None
     if target_name and target_name != NONE:
@@ -162,7 +167,8 @@ def render(root: Path, what: str, target_name: str) -> str:
 
     path = (root / what.rstrip("/")).resolve()
     if not str(path).startswith(str(root)):
-        return page.document("Bench", head + "<p>That path is outside the folder being served.</p>")
+        return page.document("Bench", head + page.said(
+            "Refused", "That path is outside the folder being served."))
 
     if path.is_dir():
         sheet = folder.measure(path, chosen)
@@ -177,8 +183,8 @@ def mastering(root: Path, job_id: str) -> tuple[str, int]:
     job = JOBS.get(job_id)
     if job is None:
         head = page.controls(choices(root), targets(), "", NONE)
-        return page.document("Bench", head + "<h2>No such run</h2>"
-                             "<p>Nothing here is mastering that.</p>"), 404
+        return page.document("Bench", head + page.said(
+            "No such run", "Nothing here is mastering that.")), 404
     head = page.controls(choices(root), targets(), job["what"], job["target"],
                          job["out_dir"])
     again = page.WORKING_AGAIN_IN_S if job["running"] else None
@@ -188,12 +194,16 @@ def mastering(root: Path, job_id: str) -> tuple[str, int]:
 
 def handler_for(root: Path):
     class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
         def send_bytes(self, status: int, kind: str, body: bytes, cache: str | None = None):
             self.send_response(status)
             self.send_header("Content-Type", kind)
             self.send_header("Content-Length", str(len(body)))
             if cache:
                 self.send_header("Cache-Control", cache)
+            if cache == NO_CACHE:
+                self.send_header("Pragma", "no-cache")
             self.end_headers()
             self.wfile.write(body)
 
@@ -237,15 +247,14 @@ def handler_for(root: Path):
             try:
                 body, status = render(root, what, target_name), 200
             except compare.BandSetMismatch as why:
-                body = page.document("Refused", page.controls(choices(root), targets(), what,
-                                                              target_name)
-                                     + f"<h2>Refused</h2><p>{why}</p>")
+                body = page.document("Refused", page.controls(
+                    choices(root), targets(), what, target_name) + page.said("Refused", str(why)))
                 status = 409
             except Exception:
-                body = page.document("Failed", page.controls(choices(root), targets(), what,
-                                                             target_name)
-                                     + "<h2>Failed</h2><pre>"
-                                     + traceback.format_exc().replace("<", "&lt;") + "</pre>")
+                body = page.document("Failed", page.controls(
+                    choices(root), targets(), what, target_name)
+                    + page.card("Failed", "<div class=\"inset\"><pre>"
+                                + traceback.format_exc().replace("<", "&lt;") + "</pre></div>"))
                 status = 500
             self.send_bytes(status, HTML, body.encode("utf-8"), NO_CACHE)
 
