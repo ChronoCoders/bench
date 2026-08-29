@@ -109,7 +109,7 @@ Then open http://127.0.0.1:8731
 
 ## Tests
 
-318 tests. Every measurement claim has a control that can fail, and a negative control
+325 tests. Every measurement claim has a control that can fail, and a negative control
 proving the check has teeth. The rig raises a distinct error when an assertion accepts
 something it was supposed to reject.
 
@@ -118,8 +118,8 @@ python -m pytest
 python tools/mutate.py
 ```
 
-The mutation tool breaks the code 63 ways and checks the suite notices, working on a
-copy of the tree rather than the tree itself. All 63 are caught. It has found faults a
+The mutation tool breaks the code 65 ways and checks the suite notices, working on a
+copy of the tree rather than the tree itself. All 65 are caught. It has found faults a
 green suite cannot, and seven of the ledger entries came from it, including three tests
 that were passing for reasons unrelated to what they were written for.
 
@@ -156,6 +156,11 @@ From the terminal:
 ```
 python tools/master_folder.py "path/to/folder" boom-bap "somewhere else"
 ```
+
+Every master carries what it is: artist, album and genre typed once per run on the bar
+and remembered, the title taken from the file's own name, and the year and the holder
+from the day it was made. A field left blank is left out rather than written empty, and
+the tags are read back off the written file rather than assumed.
 
 It never writes over an input. The output folder cannot be the folder the source is in,
 an existing master is never replaced, and a test hashes the input before and after to

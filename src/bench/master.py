@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, replace
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -79,6 +80,14 @@ def clearance(field: str, unit: float) -> float:
     return CLEARANCE * unit + loudness.TOLERANCE[CROSSCHECK_UNIT[field]]
 
 FULL_SCALE_DBTP = 0.0
+
+# What goes into the file beside the audio. Three are typed once per run because
+# nothing here can know them. The rest are not typed: the title is the file's own name,
+# the year is the year the master was made, and the holder is declared once here rather
+# than retyped into every run.
+TYPED = ("artist", "album", "genre")
+DERIVED = ("title", "date", "copyright", "software")
+HOLDER = "Altug Tatlisu"
 # Columns in the picture of the file. A drawing, not a measurement: nothing reads it
 # back and no verdict rests on it.
 WAVEFORM_COLUMNS = 1000
@@ -483,7 +492,8 @@ def render(audio: Audio, built: dict) -> np.ndarray:
     return samples
 
 
-def run(path: str | Path, target: dict, out_dir: str | Path) -> dict:
+def run(path: str | Path, target: dict, out_dir: str | Path,
+        said: dict | None = None) -> dict:
     source = Path(path).resolve()
     destination = refuse_unsafe(source, Path(out_dir))
 
@@ -517,7 +527,8 @@ def run(path: str | Path, target: dict, out_dir: str | Path) -> dict:
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     made = render(audio, built)
-    sf.write(str(destination), made.T, audio.sample_rate_hz, subtype=SUBTYPE)
+    wanted = tags_for(source, said)
+    write_master(destination, made, audio.sample_rate_hz, wanted)
 
     after = measurement.of_file(destination)
     graded = compare.against(after, target)
@@ -532,6 +543,7 @@ def run(path: str | Path, target: dict, out_dir: str | Path) -> dict:
         "after": {"measurement": after, "comparison": graded, "waveform": waveform(made)},
         "prediction": _held(built, after),
         "reached": reached(after, graded),
+        "tags": tags_held(wanted, tags_of(destination)),
     }
 
 
@@ -552,6 +564,61 @@ def second_instrument(samples: np.ndarray, rate: int) -> dict:
     }
 
 
+def tags_for(source, said: dict | None = None) -> dict:
+    """What is written into the master beside the audio.
+
+    An empty field is left out rather than written empty. An empty tag is a claim that
+    the field is empty, and this bench does not make claims it was not given.
+    """
+    year = str(date.today().year)
+    out = {"title": Path(source).stem, "date": year,
+           "copyright": f"{year} {HOLDER}", "software": METHOD}
+    for name in TYPED:
+        value = str((said or {}).get(name, "")).strip()
+        if value:
+            out[name] = value
+    return out
+
+
+def tags_of(path) -> dict:
+    """What the file says about itself, read back off the file."""
+    with sf.SoundFile(str(path)) as f:
+        return {name: getattr(f, name) or ""
+                for name in DERIVED + TYPED}
+
+
+def tags_held(wanted: dict, got: dict) -> dict:
+    """Whether the file came back saying what it was told to say.
+
+    libsndfile appends its own name to the software field, so that one is checked by
+    what it starts with. Everything else has to match exactly.
+    """
+    wrong = {}
+    for name, value in wanted.items():
+        found = got.get(name, "")
+        if name == "software":
+            if not found.startswith(value):
+                wrong[name] = found
+        elif found != value:
+            wrong[name] = found
+    left = {name: got[name] for name in got if got[name] and name not in wanted}
+    out = {"written": wanted, "held": not wrong and not left}
+    if wrong:
+        out["came_back_different"] = wrong
+    if left:
+        out["not_asked_for"] = left
+    return out
+
+
+def write_master(destination, samples: np.ndarray, rate: int, tags: dict) -> None:
+    """The audio and what it says about itself, in one file."""
+    with sf.SoundFile(str(destination), "w", samplerate=rate,
+                      channels=int(np.atleast_2d(samples).shape[0]), subtype=SUBTYPE) as f:
+        for name, value in tags.items():
+            setattr(f, name, value)
+        f.write(np.atleast_2d(samples).T)
+
+
 def waveform(samples: np.ndarray, columns: int = WAVEFORM_COLUMNS) -> list[float]:
     """The largest magnitude in each column, as a fraction of full scale."""
     loud = np.max(np.abs(np.atleast_2d(np.asarray(samples, dtype=np.float64))), axis=0)
@@ -562,7 +629,8 @@ def waveform(samples: np.ndarray, columns: int = WAVEFORM_COLUMNS) -> list[float
             for a, b in zip(edges[:-1], edges[1:]) if b > a]
 
 
-def run_each(paths, target: dict, out_dir, watching=None) -> tuple[list[dict], list[dict]]:
+def run_each(paths, target: dict, out_dir, watching=None,
+             said: dict | None = None) -> tuple[list[dict], list[dict]]:
     """Master a list of files into one folder, and say which ones it could not.
 
     A file it refuses does not stop the rest. It comes back with the reason, because a
@@ -577,7 +645,7 @@ def run_each(paths, target: dict, out_dir, watching=None) -> tuple[list[dict], l
         if watching is not None:
             watching(Path(path).name, len(done) + len(failed), len(paths))
         try:
-            done.append(run(path, target, out_dir))
+            done.append(run(path, target, out_dir, said))
         except (Unsafe, Unmasterable, DecodeError, compare.BandSetMismatch) as why:
             failed.append({"name": Path(path).name, "why": str(why)})
     return done, failed

@@ -264,3 +264,36 @@ def test_a_sibling_is_not_inside(tmp_path):
     assert serve.inside(root, root)
     assert not serve.inside(root, tmp_path / "Downloads (Mastered)")
     assert not serve.inside(root, tmp_path / "Downloads2")
+
+def test_the_bar_carries_the_three_fields_nothing_can_derive(serving):
+    _, html = get(f"{serving}/")
+    for name in ("ARTIST", "ALBUM", "GENRE"):
+        assert f">{name}</label>" in html, name
+
+
+def test_what_was_typed_comes_back_next_time(album, serving):
+    """So a record is not typed once per track."""
+    body = urllib.parse.urlencode({"what": "album/", "target": TARGET,
+                                   "artist": "Jovial Phenom", "album": "Currency of Souls",
+                                   "genre": "Alternative Hip-Hop"}).encode("utf-8")
+    with urllib.request.urlopen(f"{serving}{serve.page.MASTER_URL}", body, timeout=30) as reply:
+        where = reply.geturl()
+    until_finished(serving, where)
+
+    _, html = get(f"{serving}/")
+    for value in ("Jovial Phenom", "Currency of Souls", "Alternative Hip-Hop"):
+        assert f'value="{value}"' in html, value
+
+
+def test_it_writes_them_into_every_file_in_the_run(album, serving, tmp_path):
+    body = urllib.parse.urlencode({"what": "album/", "target": TARGET,
+                                   "artist": "BRUMA", "genre": "Guaracha"}).encode("utf-8")
+    with urllib.request.urlopen(f"{serving}{serve.page.MASTER_URL}", body, timeout=30) as reply:
+        where = reply.geturl()
+    until_finished(serving, where)
+    out = tmp_path / ("album" + serve.MASTERED_SUFFIX)
+    for made in sorted(out.iterdir()):
+        got = master.tags_of(made)
+        assert got["artist"] == "BRUMA" and got["genre"] == "Guaracha", made.name
+        assert got["title"] == made.stem, "the title is each file's own name"
+        assert got["album"] == "", "nothing was typed for album"

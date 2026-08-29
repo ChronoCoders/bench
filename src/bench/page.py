@@ -21,6 +21,11 @@ STYLE = DESIGN + """
 main { max-width: none; margin: 0; padding: 0; }
 h1, h2, h3 { font-weight: 500; }
 p { margin-bottom: 10px; color: var(--dim); max-width: 62em; }
+.fld input { appearance: none; width: 100%; background: #0a0c10;
+             border: 1px solid var(--line); border-radius: 6px; color: var(--bone);
+             font: inherit; font-size: 13px; padding: 8px 11px; }
+.fld input::placeholder { color: var(--dimmer); }
+.fld.typed { flex: 0 1 190px; }
 .fld .said { display: block; background: #0a0c10; border: 1px solid var(--line);
              border-radius: 6px; color: var(--text); font: inherit; font-size: 13px;
              padding: 8px 11px; white-space: nowrap; overflow: hidden;
@@ -138,8 +143,11 @@ def number(value, decimals: int) -> str:
 MASTER_URL = "/master"
 
 
+TYPED = ("artist", "album", "genre")
+
+
 def controls(files: list[str], targets: list[str], chosen_file: str, chosen_target: str,
-             writes_into: str = "") -> str:
+             writes_into: str = "", said: dict | None = None) -> str:
     def options(values, chosen):
         out = []
         for value in values:
@@ -151,13 +159,17 @@ def controls(files: list[str], targets: list[str], chosen_file: str, chosen_targ
     if writes_into:
         written = ("<div class=\"fld\"><label>OUTPUT</label>"
                    f"<span class=\"said\">{escape(writes_into)}</span></div>")
+    typed = "".join(
+        f"<div class=\"fld typed\"><label for=\"{name}\">{name.upper()}</label>"
+        f"<input id=\"{name}\" name=\"{name}\" type=\"text\" autocomplete=\"off\" "
+        f"value=\"{escape(str((said or {}).get(name, '')))}\"></div>" for name in TYPED)
     return (
         "<form class=\"bar\" method=\"get\" action=\"/\">"
         "<div class=\"fld grow\"><label for=\"what\">FILE OR FOLDER</label>"
         f"<select id=\"what\" name=\"what\">{options(files, chosen_file)}</select></div>"
         "<div class=\"fld\"><label for=\"target\">TARGET</label>"
         f"<select id=\"target\" name=\"target\">{options(['none'] + targets, chosen_target)}"
-        "</select></div>" + written +
+        "</select></div>" + typed + written +
         "<button class=\"go ghost\" type=\"submit\">MEASURE</button>"
         f"<button class=\"go\" type=\"submit\" formmethod=\"post\" "
         f"formaction=\"{MASTER_URL}\">MASTER</button>"
@@ -657,6 +669,13 @@ def _notes(result: dict) -> str:
         if row.get("why"):
             said.append(f"<li><b>{escape(fields.name_of(row['field']))}</b> carries no "
                         f"verdict. {escape(sentence(row['why']))}.</li>")
+
+    tags = result.get("tags")
+    if tags:
+        wrote = ", ".join(f"{name} {value}" for name, value in tags["written"].items())
+        said.append("<li>The file says " + escape(wrote) + ". "
+                    + ("Read back off it and it holds." if tags["held"]
+                       else "Read back off it, that is not what it says.") + "</li>")
 
     held = result["prediction"]
     if held.get("checked"):

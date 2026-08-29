@@ -16,11 +16,11 @@ def forget():
     """The server remembers the last thing measured and what it read, for the life of
     the process. Tests share one process, so one test landing on another's folder is a
     pass that means nothing."""
-    serve.LAST.clear()
-    serve.MEASURED.clear()
+    for held in (serve.LAST, serve.MEASURED, serve.SAID):
+        held.clear()
     yield
-    serve.LAST.clear()
-    serve.MEASURED.clear()
+    for held in (serve.LAST, serve.MEASURED, serve.SAID):
+        held.clear()
 
 
 @pytest.fixture

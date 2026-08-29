@@ -9,6 +9,7 @@ and a prediction checked against the instrument that did not make it.
 from __future__ import annotations
 
 import hashlib
+from datetime import date
 from dataclasses import replace
 from pathlib import Path
 
@@ -516,3 +517,57 @@ def test_it_says_what_the_limiter_took(mastered):
     assert squash is not None, "this file was supposed to need the limiter"
     assert squash["gain_reduction"]["largest_db"] >= 0.0
     assert 0.0 <= squash["gain_reduction"]["share_over_the_ceiling"] <= 1.0
+
+# What the master says about itself. Three fields nothing here can know are typed once
+# per run and remembered; the rest are the file's own name, the year it was made, and a
+# holder declared in one place.
+
+def test_the_master_carries_what_it_was_told(tmp_path):
+    said = {"artist": "Jovial Phenom", "album": "Currency of Souls",
+            "genre": "Alternative Hip-Hop"}
+    path = source(tmp_path, name="Ledger.wav")
+    result = master.run(path, target_around(measurement.of_file(path), bands=False),
+                        tmp_path / "out", said)
+    assert result["tags"]["held"], result["tags"]
+    got = master.tags_of(result["output"])
+    for name, value in said.items():
+        assert got[name] == value
+    assert got["title"] == "Ledger", "the title is the file's own name"
+    assert got["date"] == str(date.today().year)
+    assert got["copyright"] == f"{date.today().year} {master.HOLDER}"
+    assert got["software"].startswith(master.METHOD)
+
+
+def test_a_field_left_blank_is_left_out(tmp_path):
+    """An empty tag is a claim that the field is empty. Pull me under has no album."""
+    said = {"artist": "BRUMA", "album": "", "genre": "Guaracha"}
+    path = source(tmp_path, name="Bahrein.wav")
+    result = master.run(path, target_around(measurement.of_file(path), bands=False),
+                        tmp_path / "out", said)
+    assert "album" not in result["tags"]["written"]
+    assert master.tags_of(result["output"])["album"] == ""
+    assert master.tags_of(result["output"])["artist"] == "BRUMA"
+
+
+def test_the_tags_are_read_back_off_the_file(tmp_path):
+    """Written is not the same as stored. The check is against what the file says."""
+    wanted = {"title": "One", "artist": "Nobody"}
+    assert master.tags_held(wanted, {"title": "One", "artist": "Nobody"})["held"]
+    missed = master.tags_held(wanted, {"title": "One", "artist": ""})
+    assert not missed["held"]
+    assert missed["came_back_different"] == {"artist": ""}
+    extra = master.tags_held(wanted, {"title": "One", "artist": "Nobody", "genre": "Jazz"})
+    assert not extra["held"] and extra["not_asked_for"] == {"genre": "Jazz"}
+
+
+def test_the_tags_do_not_touch_the_audio(tmp_path):
+    """A file is not a different file for having been labelled."""
+    x = at_true_peak(music.limit(music.build("with_bass", 120.0, seconds=2.0), drive=4.0),
+                     INPUT_PEAK_DBTP)
+    plain, tagged = tmp_path / "plain.wav", tmp_path / "tagged.wav"
+    master.write_master(plain, x, sig.SR, {})
+    master.write_master(tagged, x, sig.SR, master.tags_for("Ledger.wav", {"artist": "A"}))
+    import soundfile as sf
+    assert np.array_equal(sf.read(str(plain), dtype="float64")[0],
+                          sf.read(str(tagged), dtype="float64")[0])
+    assert plain.stat().st_size != tagged.stat().st_size, "nothing was written at all"

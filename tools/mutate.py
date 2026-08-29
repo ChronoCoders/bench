@@ -555,6 +555,20 @@ MUTANTS = (
         "        return path",
     ),
     Mutant(
+        "write an empty tag rather than leaving the field out",
+        "an empty tag is a claim that the field is empty, not that it was not given",
+        MASTER,
+        "        if value:\n            out[name] = value",
+        "        out[name] = value",
+    ),
+    Mutant(
+        "say the tags held without reading the file",
+        "written is not stored, and the check is supposed to be against what came back",
+        MASTER,
+        "    out = {\"written\": wanted, \"held\": not wrong and not left}",
+        "    out = {\"written\": wanted, \"held\": True}",
+    ),
+    Mutant(
         "let being inside the loudness range skip the ceiling",
         "entry 35: a file at -0.3 dBTP against a -1.0 ceiling then has nothing applied",
         MASTER,

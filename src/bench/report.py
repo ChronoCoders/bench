@@ -219,6 +219,18 @@ def master_table(result: dict) -> str:
             out.append(f"  {one['correction'].capitalize()}. {one['why'][0].upper()}"
                        f"{one['why'][1:]}.")
 
+    tags = result.get("tags")
+    if tags:
+        out += ["", "What the file says about itself"]
+        for name, value in tags["written"].items():
+            out.append(f"  {name}: {value}")
+        out.append("  Read back off the file: " + ("it holds." if tags["held"]
+                                                   else "that is not what it says."))
+        for name, value in tags.get("came_back_different", {}).items():
+            out.append(f"    {name} came back as {value!r}")
+        for name, value in tags.get("not_asked_for", {}).items():
+            out.append(f"    {name} is there and was not asked for: {value!r}")
+
     landed = result["reached"]
     out += ["", "Where it landed"]
     for field, one in landed["fields"].items():

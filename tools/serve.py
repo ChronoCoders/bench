@@ -99,6 +99,11 @@ def out_dir_for(path: Path) -> Path:
 # person in front of it has.
 LAST: dict[str, str] = {}
 
+# What was last typed into the bar, so a record does not have to be typed once per
+# track. It is what the person in front of the bench last used, not a fact about any
+# file, so it is remembered and never written down.
+SAID: dict[str, str] = {}
+
 # What has already been measured this run, so landing on it is instant. Keyed on what
 # the files were when they were read, not on their names: a folder whose contents have
 # changed is a different folder. It lives and dies with the process and nothing is
@@ -145,7 +150,17 @@ def _refusal(root: Path, what: str, target_name: str) -> str | None:
     return None
 
 
-def start_master(root: Path, what: str, target_name: str) -> str:
+def typed(form: dict) -> dict:
+    """The three fields nothing here can derive, taken from the form or from the last
+    time they were filled in."""
+    said = {}
+    for name in page.TYPED:
+        value = form.get(name, [""])[0].strip()
+        said[name] = value if value else SAID.get(name, "")
+    return said
+
+
+def start_master(root: Path, what: str, target_name: str, said: dict | None = None) -> str:
     """The id of the run to watch. One at a time: mastering uses the whole machine, and
     two at once would be writing into the same folder under the same names."""
     refused = _refusal(root, what, target_name)
@@ -155,9 +170,10 @@ def start_master(root: Path, what: str, target_name: str) -> str:
             if already is not None:
                 return already
         job_id = str(len(JOBS) + 1)
-        job = {"what": what, "target": target_name, "running": refused is None,
-               "finished": 0, "total": 0, "at": None, "done": [], "failed": [],
-               "failure": None, "refused": refused, "out_dir": ""}
+        job = {"what": what, "target": target_name, "said": dict(said or {}),
+               "running": refused is None, "finished": 0, "total": 0, "at": None,
+               "done": [], "failed": [], "failure": None, "refused": refused,
+               "out_dir": ""}
         JOBS[job_id] = job
     if refused is not None:
         return job_id
@@ -173,7 +189,8 @@ def start_master(root: Path, what: str, target_name: str) -> str:
     def work():
         try:
             chosen = compare.load(TARGETS / f"{target_name}.json")
-            job["done"], job["failed"] = master.run_each(paths, chosen, out_dir, watching)
+            job["done"], job["failed"] = master.run_each(paths, chosen, out_dir, watching,
+                                                         said)
         except Exception:
             job["failure"] = traceback.format_exc()
         finally:
@@ -226,7 +243,8 @@ def opening(root: Path, what: str, target_name: str) -> tuple[str, str, bool]:
 
 def render(root: Path, what: str, target_name: str) -> str:
     what, target_name, ready = opening(root, what, target_name)
-    head = page.controls(choices(root), targets(), what, target_name, writes_into(root, what))
+    head = page.controls(choices(root), targets(), what, target_name,
+                         writes_into(root, what), SAID)
     if not what:
         return page.document("Bench", head + page.said(
             "Nothing to measure", "This folder holds no audio the bench can read."))
@@ -257,11 +275,11 @@ def render(root: Path, what: str, target_name: str) -> str:
 def mastering(root: Path, job_id: str) -> tuple[str, int]:
     job = JOBS.get(job_id)
     if job is None:
-        head = page.controls(choices(root), targets(), "", NONE)
+        head = page.controls(choices(root), targets(), "", NONE, "", SAID)
         return page.document("Bench", head + page.said(
             "No such run", "Nothing here is mastering that.")), 404
     head = page.controls(choices(root), targets(), job["what"], job["target"],
-                         job["out_dir"])
+                         job["out_dir"], job.get("said"))
     again = page.WORKING_AGAIN_IN_S if job["running"] else None
     return page.document("Mastering" if job["running"] else "Mastered",
                          head + page.mastering_view(job), again), 200
@@ -300,8 +318,10 @@ def handler_for(root: Path):
                 return
             length = min(int(self.headers.get("Content-Length") or 0), BODY_LIMIT)
             form = parse_qs(self.rfile.read(length).decode("utf-8", "replace"))
+            said = typed(form)
+            SAID.update(said)
             job_id = start_master(root, form.get("what", [""])[0],
-                                  form.get("target", [NONE])[0])
+                                  form.get("target", [NONE])[0], said)
             self.send_response(303)
             self.send_header("Location", f"{page.MASTER_URL}?job={job_id}")
             self.send_header("Content-Length", "0")
@@ -323,11 +343,12 @@ def handler_for(root: Path):
                 body, status = render(root, what, target_name), 200
             except compare.BandSetMismatch as why:
                 body = page.document("Refused", page.controls(
-                    choices(root), targets(), what, target_name) + page.said("Refused", str(why)))
+                    choices(root), targets(), what, target_name, "", SAID)
+                    + page.said("Refused", str(why)))
                 status = 409
             except Exception:
                 body = page.document("Failed", page.controls(
-                    choices(root), targets(), what, target_name)
+                    choices(root), targets(), what, target_name, "", SAID)
                     + page.card("Failed", "<div class=\"inset\"><pre>"
                                 + traceback.format_exc().replace("<", "&lt;") + "</pre></div>"))
                 status = 500
