@@ -242,6 +242,14 @@ def form():
     return page.controls(["a.wav", "album/"], ["boom-bap"], "a.wav", "boom-bap")
 
 
+def test_the_bar_holds_nothing_the_picker_cannot_move():
+    """A field the server filled in stays on the last selection that was submitted.
+    Beside a picker that has already moved on, it reads as the answer for the new one.
+    Everything in the bar is a control, so there is nothing to go stale."""
+    html = form()
+    assert "<span" not in html
+
+
 def test_the_page_offers_mastering_beside_measuring():
     html = form()
     assert ">MEASURE<" in html and ">MASTER<" in html

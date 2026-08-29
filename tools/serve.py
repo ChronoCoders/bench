@@ -232,20 +232,6 @@ def targets() -> list[str]:
     return sorted(p.stem for p in TARGETS.glob("*.json")) if TARGETS.is_dir() else []
 
 
-def writes_into(root: Path, what: str) -> str:
-    """Where Master would put it, shown before the button is pressed rather than after,
-    and written the way the picker writes things: from the folder being served."""
-    if not what:
-        return ""
-    path = (root / what.rstrip("/")).resolve()
-    if not inside(root, path) or not path.exists():
-        return ""
-    out = out_dir_for(path)
-    if not inside(root, out):
-        return ""
-    return str(out.relative_to(root)) + "/"
-
-
 def opening(root: Path, what: str, target_name: str) -> tuple[str, str, bool]:
     """What to show when nothing was asked for, and whether it is ready to show.
 
@@ -270,8 +256,7 @@ def opening(root: Path, what: str, target_name: str) -> tuple[str, str, bool]:
 
 def render(root: Path, what: str, target_name: str) -> str:
     what, target_name, ready = opening(root, what, target_name)
-    head = page.controls(choices(root), targets(), what, target_name,
-                         writes_into(root, what), SAID)
+    head = page.controls(choices(root), targets(), what, target_name, SAID)
     if not what:
         return page.document("Bench", head + page.said(
             "Nothing to measure", "This folder holds no audio the bench can read."))
@@ -302,11 +287,11 @@ def render(root: Path, what: str, target_name: str) -> str:
 def mastering(root: Path, job_id: str) -> tuple[str, int]:
     job = JOBS.get(job_id)
     if job is None:
-        head = page.controls(choices(root), targets(), "", NONE, "", SAID)
+        head = page.controls(choices(root), targets(), "", NONE, SAID)
         return page.document("Bench", head + page.said(
             "No such run", "Nothing here is mastering that.")), 404
     head = page.controls(choices(root), targets(), job["what"], job["target"],
-                         job["out_dir"], job.get("said"))
+                         job.get("said"))
     again = page.WORKING_AGAIN_IN_S if job["running"] else None
     return page.document("Mastering" if job["running"] else "Mastered",
                          head + page.mastering_view(job), again), 200
@@ -370,12 +355,12 @@ def handler_for(root: Path):
                 body, status = render(root, what, target_name), 200
             except compare.BandSetMismatch as why:
                 body = page.document("Refused", page.controls(
-                    choices(root), targets(), what, target_name, "", SAID)
+                    choices(root), targets(), what, target_name, SAID)
                     + page.said("Refused", str(why)))
                 status = 409
             except Exception:
                 body = page.document("Failed", page.controls(
-                    choices(root), targets(), what, target_name, "", SAID)
+                    choices(root), targets(), what, target_name, SAID)
                     + page.card("Failed", "<div class=\"inset\"><pre>"
                                 + traceback.format_exc().replace("<", "&lt;") + "</pre></div>"))
                 status = 500

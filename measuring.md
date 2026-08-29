@@ -865,6 +865,37 @@ Each profile therefore records the source format per field, the same way it
 records `evidence.n`. A field seeded from a lossy source is marked as such, and a
 field that a lossy source cannot support is absent rather than filled in.
 
+### 36. A value the server filled in, sitting beside a control that had moved
+
+The control bar carried an OUTPUT field: the folder a master would be written into,
+worked out from the selection and shown before the button was pressed. It was correct
+every time the server drew it.
+
+The page opened on `Currency of Souls/` and the field read `Currency of Souls
+(Mastered)/`. Choosing `Pull me under/` in the picker left it reading `Currency of
+Souls (Mastered)/`, because nothing had been submitted and the server had not drawn
+the page again. Asked for that selection directly, it answers `Pull me under
+(Mastered)/`. The value was never wrong. It was answering a question nobody was
+asking any more.
+
+The page carries no script by design, so a field the server fills cannot follow a
+select. Everything else in the bar is a control the browser keeps in step on its own,
+and the one item that was not read as though it did.
+
+The field is gone. Where a run writes is named on the mastering card from the moment
+the run starts, which is a statement about a run that exists rather than a prediction
+about a selection that may already have changed, and `./` is still refused with a
+reason.
+
+**A read-only value placed among controls inherits their promise to be current.** The
+fault was not in the value or in the rule that produced it. It was in putting it where
+the page implies it tracks what is on screen.
+
+The control asserts the bar holds no rendered text at all, so any value placed back
+among the fields fails it. This one was found by someone reading the page, which is
+the second in a row: entry 35 was found the same way, and both were in what the page
+said rather than in what it measured.
+
 ### The quoted figure that the measurement contradicted
 
 The boom bap profile was asked for on a stated premise: that the style carries a

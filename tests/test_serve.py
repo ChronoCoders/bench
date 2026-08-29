@@ -109,18 +109,6 @@ def test_mastering_is_offered_on_the_page(serving):
     assert ">MASTER<" in html and ">MEASURE<" in html
 
 
-def test_the_page_says_where_mastering_would_write(album, serving):
-    """Before the button is pressed, not after. A run that writes somewhere unexpected
-    is one that had nowhere to say so."""
-    _, html = get(f"{serving}/?what=album/&target={TARGET}")
-    assert "album" + serve.MASTERED_SUFFIX in html
-
-
-def test_it_says_nothing_when_there_is_nothing_chosen(serving):
-    _, html = get(f"{serving}/")
-    assert "OUTPUT" not in html
-
-
 def test_a_get_never_masters_anything(album, serving, tmp_path):
     """The button posts. Nothing that writes a file can be reachable by following a
     link, which is what a get is."""
@@ -246,13 +234,6 @@ def test_mastering_the_served_root_is_refused(album, serving, tmp_path):
     assert "Not started" in html
     assert "outside the folder being served" in html
     assert not list(tmp_path.parent.glob(tmp_path.name + serve.MASTERED_SUFFIX))
-
-
-def test_the_output_box_is_absent_when_there_is_nowhere_inside_to_write(album, serving):
-    _, html = get(f"{serving}/?what=./&target={TARGET}")
-    assert "OUTPUT" not in html
-    _, html = get(f"{serving}/?what=album/&target={TARGET}")
-    assert "OUTPUT" in html, "a folder inside the root still has somewhere to write"
 
 
 def test_a_sibling_is_not_inside(tmp_path):

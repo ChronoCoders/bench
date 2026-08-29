@@ -158,7 +158,10 @@ TYPED = ("artist", "album", "genre")
 
 
 def controls(files: list[str], targets: list[str], chosen_file: str, chosen_target: str,
-             writes_into: str = "", said: dict | None = None) -> str:
+             said: dict | None = None) -> str:
+    """Every field here is one the browser keeps in step with what is chosen. A value
+    the server worked out sits still while the picker moves, and reads as though it had
+    followed."""
     def options(values, chosen):
         out = []
         for value in values:
@@ -166,10 +169,6 @@ def controls(files: list[str], targets: list[str], chosen_file: str, chosen_targ
             out.append(f"<option value=\"{escape(value)}\"{mark}>{escape(value)}</option>")
         return "".join(out)
 
-    written = ""
-    if writes_into:
-        written = ("<div class=\"fld\"><label>OUTPUT</label>"
-                   f"<span class=\"said\">{escape(writes_into)}</span></div>")
     typed = "".join(
         f"<div class=\"fld typed\"><label for=\"{name}\">{name.upper()}</label>"
         f"<input id=\"{name}\" name=\"{name}\" type=\"text\" autocomplete=\"off\" "
@@ -180,7 +179,7 @@ def controls(files: list[str], targets: list[str], chosen_file: str, chosen_targ
         f"<select id=\"what\" name=\"what\">{options(files, chosen_file)}</select></div>"
         "<div class=\"fld\"><label for=\"target\">TARGET</label>"
         f"<select id=\"target\" name=\"target\">{options(['none'] + targets, chosen_target)}"
-        "</select></div>" + typed + written +
+        "</select></div>" + typed +
         "<button class=\"go ghost\" type=\"submit\">MEASURE</button>"
         f"<button class=\"go\" type=\"submit\" formmethod=\"post\" "
         f"formaction=\"{MASTER_URL}\">MASTER</button>"
