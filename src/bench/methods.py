@@ -547,6 +547,8 @@ _METHODS = (
             "test_it_says_where_it_landed",
             "test_a_target_it_cannot_reach_is_reported_as_not_reached",
             "test_it_says_what_the_limiter_took",
+            "test_what_it_took_was_measured_on_the_way_to_disk",
+            "test_no_candidate_in_the_search_carries_a_trim",
             "test_the_peak_it_limits_is_the_one_between_samples",
             "test_reading_samples_instead_would_fail_this",
             "test_a_signal_under_the_ceiling_is_returned_untouched",

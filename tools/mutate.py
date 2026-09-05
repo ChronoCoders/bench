@@ -402,9 +402,10 @@ MUTANTS = (
         "carry the measurement inside every row",
         "nine rows then hold nine copies of a thing that already exists once",
         FOLDER,
-        """        row = {"name": path.name, "values": {c.path: _number(one, c.path) for c in COLUMNS}}""",
-        """        row = {"name": path.name, "measurement": one,
-               "values": {c.path: _number(one, c.path) for c in COLUMNS}}""",
+        """        rows.append({"name": path.name,
+                     "values": {c.path: _number(one, c.path) for c in COLUMNS}})""",
+        """        rows.append({"name": path.name, "measurement": one,
+                     "values": {c.path: _number(one, c.path) for c in COLUMNS}})""",
     ),
     Mutant(
         "count an advisory bound among the verdicts",
@@ -587,6 +588,24 @@ MUTANTS = (
         '        + "</details>"',
     ),
     Mutant(
+        "report what the search predicted instead of what the render measured",
+        "the trim is only ever measured on the way to disk, and it is the miss report",
+        MASTER,
+        """    if took:
+        step(built, "limiter")["gain_reduction"] = took""",
+        """    if False:
+        step(built, "limiter")["gain_reduction"] = took""",
+    ),
+    Mutant(
+        "give every candidate a trim it never measured",
+        "a default zero where a measurement belongs reads as a file that was checked",
+        LIMITER,
+        """    if trim_db is not None:
+        out["constant_trim_db"] = round(float(trim_db), 3)""",
+        """    if True:
+        out["constant_trim_db"] = round(float(trim_db or 0.0), 3)""",
+    ),
+    Mutant(
         "master into the folder the source is in",
         "the mastering layer refuses that, so the page would offer a button that cannot work",
         SERVE,
@@ -636,6 +655,17 @@ MUTANTS = (
         "    if placed == compare.INSIDE:\n        aim_loud, edge = lufs,",
         "    if placed == compare.INSIDE:\n        return _finish(steps, "
         "refused, lufs, peak, 0.0)\n        aim_loud, edge = lufs,",
+    ),
+    Mutant(
+        "hold the comparison in the cache beside the measurement",
+        "a target edited between two visits keeps the same name and the old verdicts",
+        SERVE,
+        """        sheet = remember(path, "", lambda: folder.measure(path))
+        return page.document(path.name or "Folder",
+                             head + page.folder_view(folder.against(sheet, chosen)))""",
+        """        sheet = remember(path, target_name,
+                         lambda: folder.against(folder.measure(path), chosen))
+        return page.document(path.name or "Folder", head + page.folder_view(sheet))""",
     ),
     Mutant(
         "start a run with no target chosen",
