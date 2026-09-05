@@ -276,8 +276,12 @@ def render(root: Path, what: str, target_name: str) -> str:
 
     LAST["what"], LAST["target"] = what, target_name
     if path.is_dir():
-        sheet = remember(path, target_name, lambda: folder.measure(path, chosen))
-        return page.document(path.name or "Folder", head + page.folder_view(sheet))
+        # Keyed without the target, and compared afterwards, the way a single file has
+        # always been done. A target is a file that can be edited between two visits,
+        # and its name does not change when it is.
+        sheet = remember(path, "", lambda: folder.measure(path))
+        return page.document(path.name or "Folder",
+                             head + page.folder_view(folder.against(sheet, chosen)))
 
     one = remember(path, "", lambda: measurement.of_file(path))
     result = compare.against(one, chosen) if chosen else None

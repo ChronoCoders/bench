@@ -52,7 +52,8 @@ def test_the_key_appears_only_when_a_target_graded_the_table(tmp_path):
         sig.write(out / f"{i}.wav", base * scale)
     from bench import compare
     targets = Path(__file__).resolve().parent.parent / "targets"
-    graded = page.folder_view(folder.measure(out, compare.load(targets / "guaracha-club.json")))
+    graded = page.folder_view(folder.against(
+        folder.measure(out), compare.load(targets / "guaracha-club.json")))
     plain = page.folder_view(folder.measure(out))
     assert "class=\"key\"" in graded
     assert "class=\"key\"" not in plain

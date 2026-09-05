@@ -233,6 +233,49 @@ def test_a_changed_file_is_read_again(album, serving, tmp_path):
     assert "three" in html, "the new file is not in the table"
     assert time.monotonic() - started > 0.2, "it came back too fast to have been read"
 
+def outside_cells(html):
+    """Cells the folder table marks as outside their bound. Two spellings because the
+    first column of a group carries a second class."""
+    return html.count('class="out"') + html.count('class="grp out"')
+
+
+def widen(tmp_path):
+    """The same target, edited so nothing sits outside it. Same file, same name."""
+    held = tmp_path / "targets" / f"{TARGET}.json"
+    target = json.loads(held.read_text(encoding="utf-8"))
+    bound = target["fields"][master.LOUDNESS_FIELD]
+    bound["low"], bound["high"] = bound["low"] - 8.0, bound["high"] + 8.0
+    target["limits"][master.PEAK_FIELD]["max"] = 6.0
+    held.write_text(json.dumps(target), encoding="utf-8")
+
+
+def test_an_edited_target_is_compared_against_again(album, serving, tmp_path):
+    """A verdict is a fact about the files and a target. Held beside the measurement it
+    outlives the target that produced it, and the name of a target does not change when
+    its contents do."""
+    _, before = get(f"{serving}/?what=album/&target={TARGET}")
+    assert outside_cells(before), "this album was meant to sit outside this target"
+    widen(tmp_path)
+    _, after = get(f"{serving}/?what=album/&target={TARGET}")
+    assert not outside_cells(after), (
+        "the page came back carrying the verdicts of the target that was replaced"
+    )
+
+
+def test_the_measurement_itself_is_still_held(album, serving, tmp_path):
+    """The control on the one above. Dropping what is held would pass it too, and cost
+    a full re-measure of the folder on every visit."""
+    first = time.monotonic()
+    get(f"{serving}/?what=album/&target={TARGET}")
+    once = time.monotonic() - first
+    widen(tmp_path)
+    again = time.monotonic()
+    get(f"{serving}/?what=album/&target={TARGET}")
+    assert time.monotonic() - again < max(once / 4.0, 1.0), (
+        "the files were read again for a change that was only in the target"
+    )
+
+
 def test_mastering_the_served_root_is_refused(album, serving, tmp_path):
     """Its output folder would sit beside what is being served, which is outside it."""
     _, where, _ = post(serving, "./", TARGET)

@@ -130,7 +130,7 @@ def test_the_row_to_measurement_link_can_fail(tmp_path):
 
 def test_a_target_puts_a_verdict_on_each_cell_it_covers(tmp_path):
     target = compare.load(TARGETS / "guaracha-club.json")
-    sheet = folder.measure(album(tmp_path), target)
+    sheet = folder.against(folder.measure(album(tmp_path)), target)
     assert sorted(sheet["comparisons"]) == sorted(sheet["measurements"])
     for row in sheet["files"]:
         assert row["verdicts"], "a target was given and no cell carried a verdict"

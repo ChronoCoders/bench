@@ -416,7 +416,7 @@ def three_views(tmp_path):
     target = compare.load(targets / "boom-bap.json")
     one = measurement.of_file(out / "0.wav")
     return {
-        "folder": page.folder_view(folder.measure(out, target)),
+        "folder": page.folder_view(folder.against(folder.measure(out), target)),
         "file": page.file_view(one, compare.against(one, target), target),
         "master": page.master_view(mastered_result([compare.INSIDE, compare.INSIDE])),
     }

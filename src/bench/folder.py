@@ -2,6 +2,10 @@
 
 The spread is the largest value minus the smallest, and it carries how many files it was
 taken over. A spread over eight of nine files is not the spread of the record.
+
+Measuring and comparing are separate calls. A measurement is a fact about the files and
+can be held; a comparison is a fact about the files and a target, and holding one means
+serving the verdicts of a target that may since have been edited.
 """
 
 from __future__ import annotations
@@ -57,9 +61,9 @@ def audio_files(folder: str | Path) -> list[Path]:
                   if p.is_file() and p.suffix.lower() in AUDIO_SUFFIXES)
 
 
-def measure(folder: str | Path, target: dict | None = None) -> dict:
+def measure(folder: str | Path) -> dict:
     rows, skipped = [], []
-    measurements, comparisons = {}, {}
+    measurements = {}
     for path in audio_files(folder):
         try:
             one = measurement.of_file(path)
@@ -67,13 +71,8 @@ def measure(folder: str | Path, target: dict | None = None) -> dict:
             skipped.append({"name": path.name, "why": str(why)})
             continue
         measurements[path.name] = one
-        row = {"name": path.name, "values": {c.path: _number(one, c.path) for c in COLUMNS}}
-        if target is not None:
-            result = compare.against(one, target)
-            comparisons[path.name] = result
-            row["verdicts"] = {r["field"]: r["verdict"] for r in compare.judged(result["rows"])
-                               if r["field"] in row["values"]}
-        rows.append(row)
+        rows.append({"name": path.name,
+                     "values": {c.path: _number(one, c.path) for c in COLUMNS}})
 
     short = labels([row["name"] for row in rows])
     for row in rows:
@@ -103,10 +102,28 @@ def measure(folder: str | Path, target: dict | None = None) -> dict:
                      "spread_withheld": c.spread_withheld} for c in COLUMNS],
         "files": rows,
         "measurements": measurements,
-        "comparisons": comparisons,
+        "comparisons": {},
         "spread": spread,
         "skipped": skipped,
     }
+
+
+def against(sheet: dict, target: dict | None) -> dict:
+    """The same sheet with a target applied, as a new sheet.
+
+    New rather than in place because the sheet handed in may be a held measurement, and
+    a verdict written into it would outlive the target it came from.
+    """
+    if target is None:
+        return sheet
+    comparisons, rows = {}, []
+    for row in sheet["files"]:
+        result = compare.against(sheet["measurements"][row["name"]], target)
+        comparisons[row["name"]] = result
+        rows.append(dict(row, verdicts={
+            r["field"]: r["verdict"] for r in compare.judged(result["rows"])
+            if r["field"] in row["values"]}))
+    return dict(sheet, files=rows, comparisons=comparisons)
 
 
 def measurement_for(sheet: dict, name: str) -> dict:
