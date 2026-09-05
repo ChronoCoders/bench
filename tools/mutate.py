@@ -33,6 +33,7 @@ LIKELY_CATCHER = {
     "stereo.py": "tests/test_stereo.py",
     "tempo.py": "tests/test_tempo.py",
     "compare.py": "tests/test_compare.py",
+    "measurement.py": "tests/test_measurement.py",
     "folder.py": "tests/test_folder.py",
     "page.py": "tests/test_page.py",
     "typeface.py": "tests/test_typeface.py",
@@ -49,6 +50,7 @@ LEVELS = Path("src/bench/measure/levels.py")
 STEREO = Path("src/bench/measure/stereo.py")
 TEMPO = Path("src/bench/measure/tempo.py")
 COMPARE = Path("src/bench/compare.py")
+MEASUREMENT = Path("src/bench/measurement.py")
 FOLDER = Path("src/bench/folder.py")
 PAGE = Path("src/bench/page.py")
 MASTER = Path("src/bench/master.py")
@@ -320,6 +322,13 @@ MUTANTS = (
         return float(grid[peak]), False""",
     ),
     Mutant(
+        "look for the refusal class on the module that raised it",
+        "loudness and levels raise the one bs1770 declares and have none of their own",
+        MEASUREMENT,
+        "        except Unmeasurable as why:",
+        "        except module.Unmeasurable as why:",
+    ),
+    Mutant(
         "place a value against a boundary without its uncertainty",
         "a file sitting inside the error bar of a ceiling then reads as passed",
         COMPARE,
@@ -469,6 +478,15 @@ MUTANTS = (
         MASTER,
         '    second = predicted.get("predicted_by", "").startswith("the second instrument")',
         "    second = False",
+    ),
+    Mutant(
+        "let the correction spend more than the plan it corrects",
+        "entry 38: a slope measured near saturation extrapolates to 169 dB of gain",
+        MASTER,
+        """            if budget is not None:
+                lift = min(lift, budget - total)""",
+        """            if False:
+                lift = min(lift, budget - total)""",
     ),
     Mutant(
         "predict the loudness instead of measuring it",
