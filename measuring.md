@@ -1115,6 +1115,63 @@ its result holds the judgement too.** The two are facts about different things: 
 measurement is a fact about the files, a verdict is a fact about the files and a target.
 Only one of them can be kept.
 
+### 42. A name is not a control
+
+`methods.py` names the tests standing behind every figure this bench reports. The only
+thing checking those names was a search for a function of the same name. A named test
+emptied to `pass` still passed the check. So did a test registered under a method it
+never runs.
+
+Two things were measured before anything was built. Whether each named control runs the
+method it is registered against, by recording which files under `src/bench` each test
+executes code in. And the reverse, whether a test file the registry already draws from
+holds a control nothing names.
+
+Of 159 entries, 139 ran the file declaring their method and 20 did not. The 20 were
+three different things:
+
+- Two were wrong. Both EBU reject controls were registered under the ffmpeg method and
+  both read the numpy one. Added the same day the compliance cases were, by me.
+- Eleven were the registry describing the method too narrowly. Every limiter test sits
+  under the mastering method, and the limiter is half of that method living in its own
+  file. Recording one file per method, the file that happens to declare the id, made
+  eleven correct registrations read as wrong.
+- Seven were controls that call nothing on purpose. A control showing a check can reject
+  computes the wrong answer in the test itself, because calling the method to produce a
+  wrong answer would mean putting the fault back.
+
+And eleven controls were written in `test_master.py` and `test_decode.py`, files the
+registry already draws from, with nothing naming them. Registering those eleven turned
+up a twelfth case of the third kind: a control asserting that the file a ceiling case is
+built on really is inside its loudness range, which has to measure the fixture rather
+than the method, because calling the method is the thing being proved.
+
+So the registry gained the set of files a method is built out of, and a marker for the
+controls that deliberately run none of them.
+
+The marker is the part that needed care. A way to say "this control never calls in" is a
+way to take any control out of the check, and shipping it unchecked would have been
+shipping the escape hatch as the fix. It is checked in both directions: a control marked
+that way which does run the method is reported as marked wrong. **A check with an
+exemption list is worth exactly what the check on the exemption list is worth.**
+
+Two costs were established before building rather than after. The reachability record is
+a `sys.setprofile` hook that fires on call and return: 16.200 s against 16.212 s over 43
+tests, inside the run to run spread of the machine, so it lives in the suite rather than
+in a tool nobody runs. The completeness half is static and costs milliseconds. Neither
+needs a coverage dependency.
+
+What it cannot see is worth writing down. A test emptied to `pass` is caught because an
+empty body calls nothing. A test emptied to `pass` that still asks for a fixture doing
+the work is not, because the fixture ran and this cannot tell a test that read its result
+from one that ignored it. Fixture work has to be credited or every test using a module
+scoped fixture reads as touching nothing, which is the instrument talking rather than the
+registry, and that credit is exactly what buys the blind spot.
+
+Removing the two borrowed controls from the ffmpeg method left its published value claim
+with no reject control of its own, so one was written rather than left to the entry that
+would still have read as controlled.
+
 ### The quoted figure that the measurement contradicted
 
 The boom bap profile was asked for on a stated premise: that the style carries a
