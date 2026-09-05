@@ -215,7 +215,8 @@ def _candidate(search: _Search, pushed: np.ndarray, attack: float, release: floa
 
 def search_limiter(audio: Audio, pushed: np.ndarray, ceiling_aim: float,
                    target: dict, before: dict, loudness_aim: float | None = None,
-                   loudness_unit: float = 0.0) -> dict:
+                   loudness_unit: float = 0.0,
+                   planned_gain_db: float | None = None) -> dict:
     """Try every attack and release, keep the ones that change no verdict.
 
     The ceiling is met by construction, so it is not what the search is for. What it
@@ -257,26 +258,45 @@ def search_limiter(audio: Audio, pushed: np.ndarray, ceiling_aim: float,
         # aim below is one uncertainty above it for the same reason: stopping the
         # moment the condition is met leaves the verdict resting on the last bit.
         floor = loudness_aim + loudness_unit
-        total, current = 0.0, best
+        # A limiter's loudness per dB of gain only falls, so a step read off the slope
+        # measured so far always overshoots, and the further in it is the worse the
+        # overshoot. The clamp inside _slope does not bound that: it caps the divisor,
+        # which caps the multiplier at twenty and lets it compound. This does.
+        budget = None if planned_gain_db is None else abs(planned_gain_db)
+        total, current, stopped = 0.0, best, None
         for _ in range(CORRECTION_PASSES):
             if current["integrated_lufs"] - CLEARANCE * loudness_unit >= floor:
                 break
+            # A dB of gain into a limiter is not a dB of loudness out of it. How much
+            # it is worth is measured from the passes already taken rather than assumed
+            # to be one, which is what left this loop stopping short of its own aim.
             # Aim one uncertainty above the condition rather than at it. Landing on
             # the stop condition means landing on the boundary it was derived from,
             # where the comparison is decided by the last bit of a float.
             short = floor + CLEARANCE * loudness_unit - current["integrated_lufs"]
-            # A dB of gain into a limiter is not a dB of loudness out of it. How much
-            # it is worth is measured from the passes already taken rather than assumed
-            # to be one, which is what left this loop stopping short of its own aim.
             lift = short / _slope(best, current, total)
+            # A correction larger than the gain it corrects is not a correction to it,
+            # it is a second plan built by extrapolating a slope from outside the range
+            # it was measured in. What the bound costs is a run that reports it did not
+            # arrive, which is a thing this bench already knows how to say.
+            if budget is not None:
+                lift = min(lift, budget - total)
+                if lift <= 0.0:
+                    stopped = (f"the correction reached the {round(budget, 3)} dB the "
+                               "plan asked for, which is as far as a correction to that "
+                               "gain goes")
+                    break
             total += lift
             lifted = pushed * (10.0 ** (total / 20.0))
             again = limiter.required_gain(lifted, rate, ceiling_aim)
             tryout = _candidate(search, lifted, best["attack_ms"], best["release_ms"], again)
             if not tryout["accepted"]:
                 total -= lift
+                stopped = "the next lift changed a band's verdict, so it was not taken"
                 break
             current = tryout
+        if stopped is not None:
+            out["stopped_because"] = stopped
         if total:
             out["correction_db"] = round(total, 3)
             out["corrected_from"] = (
@@ -447,8 +467,10 @@ def plan(measured: dict, target: dict, filtered: dict | None = None,
             if not limiting.get("cleared_the_floor", True):
                 steps[-1]["stopped_at_lufs"] = chosen["integrated_lufs"]
                 steps[-1]["why_it_stopped"] = (
-                    f"{CORRECTION_PASSES} measured passes lifted the gain as far as this "
-                    f"setting would carry it, and it reached {chosen['integrated_lufs']} "
+                    (limiting.get("stopped_because")
+                     or f"{CORRECTION_PASSES} measured passes lifted the gain as far as "
+                        "this setting would carry it")
+                    + f", and it reached {chosen['integrated_lufs']} "
                     f"LUFS against {round(aim_loud, 3)} aimed at. Whether that is inside "
                     "the target is decided by the output, not here."
                 )
@@ -526,7 +548,7 @@ def run(path: str | Path, target: dict, out_dir: str | Path,
         limiting = search_limiter(
             audio, base * (10.0 ** (wanted / 20.0)),
             step_ceiling(target, before), target, before,
-            loudness_aim=low, loudness_unit=unit)
+            loudness_aim=low, loudness_unit=unit, planned_gain_db=wanted)
     built = plan(before, target, filtered, limiting)
 
     destination.parent.mkdir(parents=True, exist_ok=True)

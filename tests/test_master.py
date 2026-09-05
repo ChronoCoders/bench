@@ -26,6 +26,16 @@ from bench.measure import bs1770, loudness, spectral
 BAND_ALLOWANCE_PCT = 8.0
 RANGE_WIDTH_LU = 6.0
 PUSH_LU = 1.0
+DRIVE = 4.0
+# A file the chosen limiter setting cannot satisfy on its own, so the correction
+# loop is actually entered. Less saturation than DRIVE leaves the limiter loudness
+# to give back, and a push this size is more than the headroom and less than what
+# four measured passes can reach.
+CORRECTION_DRIVE = 2.0
+CORRECTION_PUSH_LU = 1.5
+# Far enough past what the limiter can give back that the correction cannot
+# converge, which is where a step read off a falling slope runs away.
+SATURATED_PUSH_LU = 6.0
 CEILING = -1.0
 INPUT_PEAK_DBTP = -1.5
 OVER_THE_CEILING = -0.3
@@ -47,7 +57,8 @@ def at_true_peak(x, dbtp):
     return x * 10.0 ** ((dbtp - bs1770.true_peak_dbtp(x)) / 20.0)
 
 
-def source(tmp_path, name="track.wav", sub=SUB_AMP, peak=INPUT_PEAK_DBTP, clean=False):
+def source(tmp_path, name="track.wav", sub=SUB_AMP, peak=INPUT_PEAK_DBTP, clean=False,
+           drive=DRIVE):
     """A master shaped like one: crest near 12 dB, a peak just under full scale, and
     content under 20 Hz. Short of the target loudness by more than its own headroom,
     so the gain alone cannot get there and the limiter has to be asked."""
@@ -58,7 +69,7 @@ def source(tmp_path, name="track.wav", sub=SUB_AMP, peak=INPUT_PEAK_DBTP, clean=
         x = (sig.sine(1000.0, SECONDS, channels=2, amp=0.4)
              + sig.sine(5000.0, SECONDS, channels=2, amp=0.4))
         return sig.write(_folder(tmp_path) / name, at_true_peak(x, peak))
-    x = music.limit(music.build("with_bass", 120.0, seconds=SECONDS), drive=4.0)
+    x = music.limit(music.build("with_bass", 120.0, seconds=SECONDS), drive=drive)
     if sub:
         t = np.arange(x.shape[1]) / sig.SR
         x = x + sub * np.sin(2.0 * np.pi * SUB_HZ * t)
@@ -103,6 +114,37 @@ def mastered(tmp_path_factory):
     path = source(tmp)
     before = measurement.of_file(path)
     return master.run(path, target_around(before), tmp / "out")
+
+
+@pytest.fixture(scope="module")
+def corrected(tmp_path_factory):
+    """A run that enters the loudness correction loop.
+
+    `mastered` does not. Its chosen setting clears the floor on the gain arithmetic
+    alone, so the loop is never entered and every test written against that fixture
+    passes with the loop deleted. This one is short of its target by more than the
+    limiter gives back unaided.
+    """
+    tmp = tmp_path_factory.mktemp("corrected")
+    path = source(tmp, drive=CORRECTION_DRIVE)
+    before = measurement.of_file(path)
+    low = round(compare.dig(before, master.LOUDNESS_FIELD) + CORRECTION_PUSH_LU, 3)
+    return master.run(path, target_around(before, low=low), tmp / "out")
+
+
+@pytest.fixture(scope="module")
+def saturated(tmp_path_factory):
+    """A run whose correction cannot converge.
+
+    The target asks for more loudness than the limiter will give back, so every pass
+    measures a smaller return than the one before it and a step read off that slope
+    overshoots by more each time. Unbounded, four passes asked for 169 dB of gain.
+    """
+    tmp = tmp_path_factory.mktemp("saturated")
+    path = source(tmp)
+    before = measurement.of_file(path)
+    low = round(compare.dig(before, master.LOUDNESS_FIELD) + SATURATED_PUSH_LU, 3)
+    return master.run(path, target_around(before, low=low), tmp / "out")
 
 
 # It never writes over an input.
@@ -476,23 +518,70 @@ def test_the_loudness_lands_inside_the_target(mastered):
     )
 
 
-def test_the_correction_stops_with_room_and_not_on_the_condition(mastered):
+def test_that_file_really_needs_the_correction(corrected):
+    """The control on the two below. Both of them pass on a file whose chosen setting
+    already clears the floor, because the loop they are about is never entered. This
+    asserts the fixture reaches it before anything asserts what it does there."""
+    search = corrected["limiter_search"]
+    assert search is not None and search.get("chosen"), "this file was meant to need one"
+    assert search["correction_db"] > 0.0, (
+        "the chosen setting reached the floor unaided, so nothing below this exercises "
+        "the correction loop and a loop deleted outright would go unnoticed"
+    )
+
+
+def test_the_correction_reaches_the_target_it_aims_at(corrected):
+    """Fault two. The limiter takes loudness the gain arithmetic cannot see, and the
+    passes that measure it back are what close the gap."""
+    assert corrected["limiter_search"]["cleared_the_floor"], (
+        "this file is built so the correction can reach its aim. Not reaching it means "
+        "the passes were not taken"
+    )
+    assert corrected["reached"]["arrived"], corrected["reached"]["fields"]
+
+
+def test_the_correction_stops_with_room_and_not_on_the_condition(corrected):
     """Fault three. The loop stops when the measurement clears its aim, and it has to
     clear it by a whole reporting step or the stop rests on the last bit of a float."""
-    search = mastered["limiter_search"]
+    search = corrected["limiter_search"]
     assert search is not None and search.get("chosen"), "this file was meant to need one"
     assert search["cleared_the_floor"], (
         "this file is built so the correction can reach its aim. Not reaching it means "
         "the loop stopped early, which is the fault this test is here for"
     )
-    unit = compare.dig(mastered["before"]["measurement"],
+    unit = compare.dig(corrected["before"]["measurement"],
                        "loudness.uncertainty.integrated_lufs")
-    low = row(mastered["after"]["comparison"], master.LOUDNESS_FIELD)["bound"]["low"]
+    low = row(corrected["after"]["comparison"], master.LOUDNESS_FIELD)["bound"]["low"]
     room = search["chosen"]["integrated_lufs"] - master.CLEARANCE * unit - low
     assert room >= unit, (
         f"the correction stopped {round(room, 6)} above its own stop condition, which "
         f"is less than the {unit} the measurement resolves"
     )
+
+
+def test_that_file_really_cannot_converge(saturated):
+    """The control on the one below. On a file the correction finishes, no bound is
+    ever reached and a test of the bound passes whatever the bound is."""
+    assert saturated["limiter_search"]["correction_db"] > 0.0, "it never entered the loop"
+    assert not saturated["limiter_search"]["cleared_the_floor"], (
+        "this file is built so the correction cannot reach its aim. Reaching it means "
+        "nothing below is testing a bound"
+    )
+    assert not saturated["reached"]["arrived"]
+
+
+def test_a_correction_that_cannot_converge_is_bounded(saturated):
+    """A limiter near saturation returns almost nothing per dB, and the slope only
+    falls, so a step read off the slope so far overshoots and the overshoot compounds.
+    The correction may spend what the plan spent and no more."""
+    search = saturated["limiter_search"]
+    gain = master.step(saturated["plan"], "gain")
+    asked = round(gain["db"] - gain["corrected_by_db"], 3)
+    assert search["correction_db"] <= asked, (
+        f"the correction added {search['correction_db']} dB on top of the {asked} dB "
+        "the plan asked for, which is a second plan rather than a correction to one"
+    )
+    assert search["stopped_because"], "a correction that stopped short has to say why"
 
 
 def test_it_says_where_it_landed(mastered):

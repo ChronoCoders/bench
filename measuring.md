@@ -924,6 +924,135 @@ are the ones where something else reads first or nothing runs last.
 Nothing here says a shipped target was ever wrong. The check held, which is why this
 was visible at all, and the file it caught was never one of the two.
 
+### 38. The fixture that never entered the loop it was named for
+
+A full run of the mutation tool came back with two survivors, both in the loudness
+correction loop inside `search_limiter`: setting `CORRECTION_PASSES` to 0, which
+deletes the loop, and dropping the clearance out of the aim, which lands the loop on
+the boundary it was derived from. Nothing in 338 tests noticed either.
+
+Reading the `mastered` fixture back said why in one line:
+
+```
+correction_db      0.0
+corrected_from     absent
+cleared_the_floor  True
+accepted / tried   36 / 36
+```
+
+The chosen limiter setting cleared the floor on the gain arithmetic alone, so the
+loop was never entered. The first mutant deletes code that does not run. The second
+edits an expression that is never evaluated.
+
+Two tests were written against that fixture. `test_the_loudness_lands_inside_the_target`
+passes because the gain got there without the loop.
+`test_the_correction_stops_with_room_and_not_on_the_condition` asserts
+`cleared_the_floor` and then a margin, and both hold with no correction at all. Its
+own docstring said "this file is built so the correction can reach its aim". The file
+never needed the aim.
+
+Both mutants exist because of entry 26, which found and fixed those two faults. The
+fixes are real and still in the code. What was never built was material that reaches
+them, so for as long as the guards have existed they have been guarding nothing.
+
+The fixture that reaches the loop was found by sweeping rather than assumed. Source
+saturation and target push were varied and the run read back off each combination.
+Three things have to hold together: the loop is entered, it reaches its aim, and the
+output lands inside the target. At the shipped `drive` of 4.0 they do not. A push of
+1.0 LU, which is what `mastered` uses, never enters the loop at all. A push of 1.5
+enters it by 0.006 dB and clears, but the file does not arrive. Pushes from 2.0 to 8.0
+enter it and never clear, and before entry 39 bounded it, 6.0 and above ran the
+correction away to 169 and 301 dB.
+
+At `drive` 2.0 with a push of 1.5 LU all three hold: `correction_db` 0.098,
+`cleared_the_floor` true, arrived. Less saturation leaves the limiter loudness to
+give back, which is the condition the loop exists for.
+
+A control was written before anything else. `test_that_file_really_needs_the_correction`
+asserts `correction_db` is above zero, so a fixture that stops reaching the loop fails
+there rather than passing everywhere. It catches the deleted loop and it does not
+catch the changed aim, which is right: with the aim moved the loop still runs. A
+control that caught both would be a third copy of the other two.
+
+```
+predict the loudness instead of measuring it              caught by 3
+stop the correction on the condition it was derived from   caught by 2
+```
+
+**A test names the code it is about. Only its fixture decides whether it reaches it.**
+The name, the docstring and the assertions were all about a loop the material never
+provoked, and every one of them read as coverage.
+
+The fault was invisible for the same reason it existed. No test drove the code, so
+nothing could report on the code being undriven. Only an instrument that breaks the
+code and asks whether anything notices can see a guard that has never been armed.
+
+Nothing here says the correction loop is wrong. On real material it runs: `Settled.wav`
+against boom bap corrects by 1.36 dB. It was exercised in use and not once in the
+suite.
+
+### 39. A clamp on the divisor, read as a bound on the result
+
+Entry 38's sweep turned up a second thing. Asked for 6 LU more than it had, the
+loudness correction planned a gain of 169 dB. At 8 LU it planned 301.
+
+```
+pass 1: short 4.009  raw slope 1.00000  clamped 1.000  lift  4.009  total   4.009
+pass 2: short 3.611  raw slope 0.09927  clamped 0.099  lift 36.375  total  40.384
+pass 3: short 3.230  raw slope 0.01929  clamped 0.050  lift 64.602  total 104.986
+pass 4: short 3.226  raw slope 0.00746  clamped 0.050  lift 64.522  total 169.508
+```
+
+Pass 3 buys four thousandths of a LU for 64 dB.
+
+`SLOPE_LIMITS` has a floor, and its comment says "The floor stops the correction asking
+for a gain that no setting could survive". It stops nothing. It clamps the divisor,
+which caps the multiplier at twenty and lets it compound across passes. The comment
+described a property the code did not have, and reading the comment is how the loop
+kept looking sound.
+
+Underneath that is the reason no clamp on a divisor could have helped. A limiter's
+loudness per dB of gain only falls. A step read off the slope measured so far is a
+linear extrapolation of a decaying function, so it always overshoots, and the further
+into saturation the worse. The fault is in the size of the step, not in the number it
+is divided by.
+
+Nothing rejected the result either. A candidate is accepted when it changes no band's
+verdict and puts no sample over full scale. At plus 169 dB the limiter is a constant
+gain, and a constant gain moves no band at all, so the runaway passed the criterion
+for the same reason entry 34 records: the objective's best answer is to do nothing
+dynamic. The degeneracy that makes the search weak is what made the runaway invisible
+to it.
+
+The bound that stayed is one line and rests on a number the run already has: the
+correction may not exceed the gain the plan asked for. A correction larger than the
+thing it corrects is not a correction, it is a second plan. What it costs when the
+target really is out of reach is a run reporting that it did not clear the floor and
+did not arrive, and why, which this bench already knows how to say. The 169 dB was the
+loop refusing to give that answer.
+
+Two other bounds were written at the same time and removed before the commit: a step
+no larger than the gain already measured over, and a stop when the slope reaches its
+own floor. Both are defensible in isolation, and no test caught either mutant. They
+are not untested, they are unreachable. Once the correction cannot exceed the plan's
+gain, a step bound only changes how many passes it takes to reach that cap and the
+slope stop can only fire before the cap when the lifts are small, which is when the
+ordinary stop condition fires first. Taking both out changed no figure in the
+verification: 169.508 to 6.055, 301.367 to 8.055, and the two converging fixtures
+untouched at 0.098 and 0.0. That is entry 38's lesson one file over, and it is easier
+to make than to notice.
+
+**A clamp on a divisor is not a bound on the result.** Neither is a comment saying it
+is one.
+
+It never fired on anything mastered here. All eleven masters on disk plus one made
+during the audit were measured against their sources: loudness lifted 3.2 to 5.3 LU,
+crest given up between 0.33 and 2.83 dB, every one landing on the ceiling less its
+clearance. The smallest crest any of them came out with is 9.79 dB, where a runaway
+would have flattened a file toward nothing. The two runs that fell short of their
+target, which is the condition the runaway needs, lost 1.64 and 1.71 dB and stopped on
+their own.
+
 ### The quoted figure that the measurement contradicted
 
 The boom bap profile was asked for on a stated premise: that the style carries a
