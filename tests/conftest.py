@@ -8,7 +8,38 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "tools"))
 
+import reach
 import serve
+
+REACHABILITY = "test_every_control_reaches_the_method_it_stands_behind"
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_fixture_setup(fixturedef, request):
+    reach.start()
+    try:
+        yield
+    finally:
+        reach.credit_fixture(fixturedef.argname, reach.stop())
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    reach.start()
+    try:
+        yield
+    finally:
+        reach.credit_test(getattr(item, "originalname", None) or item.name,
+                          reach.stop(), getattr(item, "fixturenames", ()))
+
+
+def pytest_collection_modifyitems(items):
+    """The reachability check reads what the session ran, so it runs after the session.
+    Collection order is alphabetical and test_methods.py sits in the middle of it, where
+    the check would pass on the two thirds of the suite that had run by then."""
+    last = [i for i in items if i.name == REACHABILITY]
+    if last:
+        items[:] = [i for i in items if i.name != REACHABILITY] + last
 
 
 @pytest.fixture(autouse=True)

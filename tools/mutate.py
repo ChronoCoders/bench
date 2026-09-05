@@ -55,6 +55,7 @@ FOLDER = Path("src/bench/folder.py")
 PAGE = Path("src/bench/page.py")
 MASTER = Path("src/bench/master.py")
 SERVE = Path("tools/serve.py")
+METHODS = Path("src/bench/methods.py")
 LIMITER = Path("src/bench/limiter.py")
 
 READ_BODY = '''    data, rate = sf.read(str(path), dtype="float64", always_2d=True)
@@ -666,6 +667,28 @@ MUTANTS = (
         """        sheet = remember(path, target_name,
                          lambda: folder.against(folder.measure(path), chosen))
         return page.document(path.name or "Folder", head + page.folder_view(sheet))""",
+    ),
+    Mutant(
+        "mark a control as running none of the method it stands behind",
+        "the escape hatch for a control that never calls in, used to hide one that does",
+        METHODS,
+        '        inline=("test_partial_bin_weighting_can_fail",),',
+        '        inline=("test_partial_bin_weighting_can_fail",\n'
+        '                "test_flat_spectrum_fills_bands_in_proportion_to_width"),',
+    ),
+    Mutant(
+        "declare only the file that names the method",
+        "the limiter is half of the mastering method and lives in its own file",
+        METHODS,
+        '        files=("master.py", "limiter.py"),',
+        '        files=("master.py",),',
+    ),
+    Mutant(
+        "drop a control from the registry",
+        "a test standing behind a number, with nothing saying it does",
+        METHODS,
+        '            "test_dc_offset_block_max_sees_a_step_the_mean_hides",\n',
+        "",
     ),
     Mutant(
         "start a run with no target chosen",
