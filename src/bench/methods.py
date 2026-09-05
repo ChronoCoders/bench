@@ -10,12 +10,32 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Method:
+    """One entry per method id.
+
+    `files` is every file the method is built out of, not the one that happens to
+    declare the id. The limiter is part of the mastering method and lives in its own
+    file, so a control that exercises it exercises the method.
+
+    `inline` names the controls that deliberately run none of those files. There are
+    two kinds. A control showing a check can reject computes the wrong answer in the
+    test itself, because calling the method to produce a wrong answer would need the
+    fault put back. A control establishing the premise another control rests on measures
+    the fixture rather than the method, because calling the method is the thing being
+    proved.
+
+    The marker is checked in both directions: a name here that does run the method is
+    marked wrong, and that is what stops the marker becoming a way to switch the check
+    off.
+    """
+
     id: str
     measures: str
     computed_from: str
     failure_modes: tuple[str, ...]
     cross_check: str
+    files: tuple[str, ...]
     controls: tuple[str, ...]
+    inline: tuple[str, ...] = ()
 
 
 _METHODS = (
@@ -33,9 +53,11 @@ _METHODS = (
         ),
         cross_check="Frames actually decoded divided by the decoded rate, against the duration the container "
         "claims. The two come from different places, and a claim that is wrong moves only one of them.",
+        files=("decode.py",),
         controls=(
             "test_probe_reads_wav_pcm_fields",
             "test_probe_omits_bit_depth_for_lossy",
+            "test_source_dict_omits_what_the_container_did_not_say",
             "test_container_duration_disagreeing_with_frames_is_caught",
             "test_container_duration_check_can_fail",
         ),
@@ -63,6 +85,7 @@ _METHODS = (
         "disagrees with the file. Second, decoded frames divided by the decoded rate against the "
         "container duration, which catches a truncated decode and a decoder that resampled while still "
         "claiming the source rate.",
+        files=("decode.py",),
         controls=(
             "test_decode_keeps_content_above_11k",
             "test_decode_keeps_content_above_11k_can_fail",
@@ -101,6 +124,7 @@ _METHODS = (
         ),
         cross_check="bs1770.py, an independent implementation of the same recommendation, on every "
         "file. The deltas are reported in the measurement rather than averaged away.",
+        files=("ebur128.py",),
         controls=(
             "test_metadata_peaks_are_linear_not_decibels",
             "test_a_second_summary_block_is_refused",
@@ -110,8 +134,7 @@ _METHODS = (
             "test_true_peak_finds_the_intersample_peak",
             "test_true_peak_can_fail",
             "test_the_primary_instrument_meets_the_published_value",
-            "test_the_loudness_tolerance_can_reject",
-            "test_the_true_peak_tolerance_can_reject",
+            "test_the_primary_tolerance_can_reject",
         ),
     ),
     Method(
@@ -145,6 +168,7 @@ _METHODS = (
         cross_check="Two analytic answers that involve neither instrument: the loudness of a tone "
         "computed from the filter's frequency response, and the true peak of a sine sampled either "
         "side of every peak, which is 3.01 dB above its own sample peak.",
+        files=("bs1770.py",),
         controls=(
             "test_kweighting_matches_the_published_48k_table",
             "test_kweighting_table_check_can_fail",
@@ -192,6 +216,7 @@ _METHODS = (
         ),
         cross_check="Neither instrument checks this one. The analytic controls do, and so does the "
         "discontinuity case, which is the only material here that makes the flag fire.",
+        files=("loudness.py",),
         controls=(
             "test_the_two_instruments_agree_within_the_stated_tolerances",
             "test_a_discontinuity_makes_them_disagree_about_true_peak",
@@ -247,6 +272,8 @@ _METHODS = (
         "sided doubling by a route that ends in the time domain. Then an elliptic filterbank, on "
         "controlled signals only, where nothing sits near a band edge and its soft skirts cannot "
         "bite.",
+        files=("spectral.py",),
+        inline=("test_partial_bin_weighting_can_fail",),
         controls=(
             "test_two_tone_split_matches_the_amplitudes",
             "test_two_tone_split_can_fail",
@@ -311,6 +338,8 @@ _METHODS = (
         "over the decoded samples, with nothing to compare them against but signals built with a "
         "known offset and a known number of runs. Crest has one analytic answer: a sine is "
         "exactly 3.0103 dB, and a square is 0.",
+        files=("levels.py",),
+        inline=("test_the_silence_invariance_can_fail",),
         controls=(
             "test_crest_of_a_sine_is_three_decibels",
             "test_crest_of_a_square_can_fail",
@@ -353,6 +382,8 @@ _METHODS = (
         "noise have correlation a squared over a squared plus b squared, and side over mid of b "
         "squared over two, over a squared plus b squared over two. Both are known before the file "
         "exists and neither involves the code.",
+        files=("stereo.py",),
+        inline=("test_the_direct_current_invariance_can_fail",),
         controls=(
             "test_correlation_of_identical_channels_is_one",
             "test_correlation_of_inverted_channels_is_minus_one",
@@ -443,6 +474,7 @@ _METHODS = (
         "answers it resolved the octave worse than not having it, 25 right against 27, so it "
         "reports fit quality only and does not choose. A number that looks checked and is not "
         "would be worse than the gap.",
+        files=("tempo.py",),
         controls=(
             "test_a_click_track_reads_its_own_tempo",
             "test_a_rate_at_the_search_boundary_is_declared",
@@ -510,6 +542,14 @@ _METHODS = (
         "instruments, and checks the output against what the plan predicted using the "
         "instrument that made the prediction. The before and after comparisons are the same "
         "comparison the folder table uses.",
+        files=("master.py", "limiter.py"),
+        inline=(
+            "test_that_byte_check_can_fail",
+            "test_aiming_by_one_uncertainty_leaves_none",
+            "test_reading_samples_instead_would_fail_this",
+            "test_the_ceiling_check_can_fail",
+            "test_that_file_really_is_inside_its_loudness_range",
+        ),
         controls=(
             "test_it_refuses_to_write_into_the_folder_the_source_is_in",
             "test_it_refuses_the_folder_however_the_path_is_spelled",
@@ -539,6 +579,9 @@ _METHODS = (
             "test_the_output_is_measured_and_the_prediction_holds",
             "test_the_peak_lands_inside_the_ceiling_not_on_it",
             "test_the_loudness_lands_inside_the_target",
+            "test_a_file_over_the_ceiling_comes_under_it_with_the_loudness_already_inside",
+            "test_that_file_really_is_inside_its_loudness_range",
+            "test_it_writes_a_file_that_is_under_the_ceiling",
             "test_that_file_really_needs_the_correction",
             "test_that_file_really_cannot_converge",
             "test_a_correction_that_cannot_converge_is_bounded",
@@ -546,6 +589,8 @@ _METHODS = (
             "test_the_correction_stops_with_room_and_not_on_the_condition",
             "test_it_says_where_it_landed",
             "test_a_target_it_cannot_reach_is_reported_as_not_reached",
+            "test_it_says_when_the_winner_sits_on_the_edge_of_the_grid",
+            "test_a_grid_of_one_setting_is_all_edge",
             "test_it_says_what_the_limiter_took",
             "test_what_it_took_was_measured_on_the_way_to_disk",
             "test_no_candidate_in_the_search_carries_a_trim",
@@ -562,6 +607,11 @@ _METHODS = (
             "test_what_it_reports_about_its_own_work",
             "test_the_envelope_meets_the_ceiling_without_the_trim",
             "test_the_ceiling_check_can_fail",
+            "test_the_master_carries_what_it_was_told",
+            "test_the_year_is_not_read_off_the_clock",
+            "test_a_field_left_blank_is_left_out",
+            "test_the_tags_are_read_back_off_the_file",
+            "test_the_tags_do_not_touch_the_audio",
         ),
     ),
 )
@@ -586,7 +636,9 @@ def render_markdown() -> str:
         out.extend(f"- {f}" for f in m.failure_modes)
         out.append("")
         out.append(f"**Cross check** {m.cross_check}\n")
-        out.append("**Controls** " + ", ".join(f"`{c}`" for c in m.controls) + "\n")
+        out.append("**Runs in** " + ", ".join(f"`{f}`" for f in m.files) + "\n")
+        out.append("**Controls** " + ", ".join(
+            f"`{c}`" + (" (inline)" if c in m.inline else "") for c in m.controls) + "\n")
     return "\n".join(out)
 
 

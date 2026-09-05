@@ -162,6 +162,15 @@ def test_the_second_instrument_meets_the_published_value(case, rendered):
     _check(case, second(case, rendered[case.name]), "bs1770 in numpy")
 
 
+def test_the_primary_tolerance_can_reject(rendered):
+    """The two below read the second instrument, so neither of them says anything about
+    whether the primary readings are being judged at all. Case 2 is case 1 ten decibels
+    down, and ffmpeg reading it against the value stated for case 1 has to be refused."""
+    quiet = primary(BY_NAME["3341-2"], rendered["3341-2"])
+    rig.rejects(quiet, BY_NAME["3341-1"].stated, 0.1,
+                "a tone 10 dB down, read by ffmpeg against the value stated for case 1")
+
+
 def test_the_loudness_tolerance_can_reject(rendered):
     """Case 2 is case 1 ten decibels down. Read against the value stated for case 1 it
     has to be refused, or the tenth of a decibel these cases are judged on proves
