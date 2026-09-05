@@ -118,9 +118,9 @@ python -m pytest
 python tools/mutate.py
 ```
 
-The mutation tool breaks the code 68 ways and checks the suite notices, working on a
-copy of the tree rather than the tree itself. All 68 are caught. It has found faults a
-green suite cannot, and seven of the ledger entries came from it, including three tests
+The mutation tool breaks the code 73 ways and checks the suite notices, working on a
+copy of the tree rather than the tree itself. All 73 are caught. It has found faults a
+green suite cannot, and nine of the ledger entries came from it, including five tests
 that were passing for reasons unrelated to what they were written for.
 
 ```
