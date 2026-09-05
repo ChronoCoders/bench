@@ -1053,6 +1053,68 @@ would have flattened a file toward nothing. The two runs that fell short of thei
 target, which is the condition the runaway needs, lost 1.64 and 1.71 dB and stopped on
 their own.
 
+### 40. A default sitting where a measurement belongs
+
+`render` is the one place that decides what goes to disk. It called `limiter.apply`,
+which measures the true peak of what it is about to return and takes a constant trim if
+the envelope missed the ceiling, and it threw the report away. What sat in the structure
+instead came from `limiter.worked(gain, needed)` in the search, whose `trim_db` argument
+defaulted to zero.
+
+The audit entry for this said it was on every master page. That was wrong and worth
+correcting. `constant_trim_db` is displayed nowhere, not on the page and not in the text
+report. What is displayed from that block is `largest_db` and `share_over_the_ceiling`,
+and those came from the winning candidate, which is the same signal at the same setting
+as the render. Those numbers were right. They were predictions that happened to be
+correct.
+
+What was wrong is narrower. Both the limiter module and the README say that a trim which
+is not zero is the envelope reporting that it missed. Nothing read the report, so that
+claim rested on tests over synthetic signals and on no file this bench has ever written.
+And a zero produced by a default argument was sitting in a field whose name says it was
+measured.
+
+The fix makes the field absent unless something measured it. `worked` takes `None` and
+omits the key, the search omits it because a search never measures a trim, `render`
+returns what `apply` reported, and the page and the report say so when it is not zero.
+
+The guard is the presence of the key rather than its value, and it has to be. On
+everything this repo has measured the trim is zero, so a test asserting zero passes
+whether the number was measured or defaulted. **Where the right answer and the wrong
+answer are the same number, the only thing left to test is where the number came from.**
+
+**A default in the place of a measurement is not a zero. It is a claim nobody made.**
+
+### 41. Two paths for one thing, and the one that cached more went stale
+
+The page holds the last few measurements so that landing on a folder is instant. What it
+held for a folder was the whole sheet, verdicts included, keyed on the files and on the
+name of the target. A target is a file, its name does not change when its contents do,
+and `tools/seed_target.py` rewrites targets in place. Editing one between two visits to
+the same folder served the verdicts of the target it replaced, with nothing on the page
+to say so.
+
+The single file path never had this. It holds `measurement.of_file` and calls
+`compare.against` on every request, because those were already two calls. The folder path
+had one call, `folder.measure(folder, target)`, that measured and judged together, so
+anything holding its result held a judgement too.
+
+Stamping the target file into the cache key would have fixed the staleness and left two
+paths doing one thing in two ways, which is the condition that produced the fault rather
+than the fault itself. `measure` now measures and `against` judges, and the two paths are
+the same shape. `against` returns a new sheet rather than filling in the one it was
+given, because the one it was given may be the held measurement and a verdict written
+into it outlives the target that produced it.
+
+The control matters more than the test here. Deleting the cache altogether would pass a
+staleness test perfectly and cost a full re-measure of the folder on every visit, so the
+second test holds the measurement to still being held.
+
+**A call that measures and judges in one step cannot be cached, because whatever holds
+its result holds the judgement too.** The two are facts about different things: a
+measurement is a fact about the files, a verdict is a fact about the files and a target.
+Only one of them can be kept.
+
 ### The quoted figure that the measurement contradicted
 
 The boom bap profile was asked for on a stated premise: that the style carries a
