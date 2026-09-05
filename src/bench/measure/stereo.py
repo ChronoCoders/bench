@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from bench.decode import Audio
+from bench.measure import Unmeasurable
 
 METHOD = "stereo/energy-weighted-correlation"
 
@@ -12,10 +13,6 @@ UNCERTAINTY = {
     "correlation": 0.5 * 10.0 ** -CORRELATION_DECIMALS,
     "width_side_mid_db": 0.5 * 10.0 ** -WIDTH_DECIMALS,
 }
-
-
-class Unmeasurable(ValueError):
-    pass
 
 
 def centred(samples: np.ndarray) -> np.ndarray:

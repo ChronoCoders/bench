@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from bench.decode import Audio, decode
-from bench.measure import levels, loudness, spectral, stereo, tempo
+from bench.measure import Unmeasurable, levels, loudness, spectral, stereo, tempo
 
 MODULES = (
     ("loudness", loudness),
@@ -38,7 +38,10 @@ def of_audio(audio: Audio) -> dict:
     for name, module in MODULES:
         try:
             block = module.measure(audio)
-        except module.Unmeasurable as why:
+        # One class for every module, because a module can raise the one belonging
+        # to another. levels and loudness both reach bs1770 and neither declares its
+        # own, so naming the module here looked for an attribute that was never there.
+        except Unmeasurable as why:
             out[name] = {"unmeasurable": str(why)}
             continue
         out[name] = _expand_spectral(block) if name == "spectral" else block

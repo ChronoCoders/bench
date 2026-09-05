@@ -4,6 +4,7 @@ import numpy as np
 from scipy.signal import stft
 
 from bench.decode import Audio
+from bench.measure import Unmeasurable
 
 METHOD = "tempo/flux-envelope-phase-track"
 
@@ -37,10 +38,6 @@ PHASE_STEPS = 128
 
 MIN_DURATION_S = 30.0
 MIN_ONSETS = 20
-
-
-class Unmeasurable(ValueError):
-    pass
 
 
 def envelope(samples: np.ndarray, rate: int) -> tuple[np.ndarray, np.ndarray, float]:

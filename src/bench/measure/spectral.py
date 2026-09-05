@@ -4,6 +4,7 @@ import numpy as np
 from scipy.fft import next_fast_len
 
 from bench.decode import Audio
+from bench.measure import Unmeasurable
 
 METHOD = "spectral/periodogram-band-energy"
 
@@ -15,10 +16,6 @@ ROLLUPS = {"under_250_hz_pct": (20.0, 250.0), "band_60_250_pct": (60.0, 250.0)}
 MIN_DURATION_S = 1.0
 PERCENT_DECIMALS = 2
 PERCENT_UNCERTAINTY = 0.5 * 10.0 ** -PERCENT_DECIMALS
-
-
-class Unmeasurable(ValueError):
-    pass
 
 
 def band_power(freqs: np.ndarray, spectrum: np.ndarray, lo: float, hi: float) -> float:

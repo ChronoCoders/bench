@@ -1,5 +1,9 @@
-"""The spectral block is expanded on the way out, and what the expansion drops is not
-recoverable downstream. This is the file that watches the expansion."""
+"""What measurement.py does to what the measure modules hand it.
+
+The spectral block is expanded on the way out, and what the expansion drops is not
+recoverable downstream. A refusal is carried through with its reason, including when
+the module that refused borrowed the class from another module.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +20,12 @@ def two_tones(tmp_path, seconds=6.0):
     x = (sig.sine(100, seconds, channels=2, amp=0.4)
          + sig.sine(5000, seconds, channels=2, amp=0.4))
     return decode(sig.write(tmp_path / "two-tones.wav", x))
+
+
+def surround(tmp_path, channels=5, seconds=2.0):
+    """More channels than either instrument will weight. EBU Tech 3341 case 6 is the
+    published version of this file, and the tone there is 1 kHz as well."""
+    return sig.write(tmp_path / "surround.wav", sig.sine(1000, seconds, channels=channels))
 
 
 def dropped_resolution(block):
@@ -54,6 +64,23 @@ def test_that_check_can_fail(tmp_path):
             f"{RESOLUTION_FIELD} was still readable after an expansion that drops it, "
             "so the check above cannot fail"
         )
+
+
+def test_a_borrowed_refusal_is_carried_rather_than_crashed(tmp_path):
+    """loudness and levels both reach bs1770 and neither declares a refusal class of
+    its own. Naming the module in the handler looked for an attribute that was never
+    there, so a refusal arrived as an AttributeError with the reason destroyed."""
+    one = measurement.of_file(surround(tmp_path))
+    assert "1.41" in one["loudness"]["unmeasurable"]
+    assert "1.41" in one["levels"]["unmeasurable"]
+    assert "no left and right" in one["stereo"]["unmeasurable"]
+
+
+def test_the_rest_of_the_measurement_survives_a_refusal(tmp_path):
+    """The control. If one refusal stopped the whole measurement, the test above would
+    pass on a structure that had simply given up."""
+    one = measurement.of_file(surround(tmp_path))
+    assert one["spectral"]["bands"], "the spectrum does not care how many channels there are"
 
 
 def test_a_measured_file_carries_the_resolution(tmp_path):

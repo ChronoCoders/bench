@@ -5,6 +5,8 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.signal import firwin, lfilter, upfirdn
 
+from bench.measure import Unmeasurable
+
 METHOD = "loudness/bs1770-4-numpy"
 
 ABSOLUTE_GATE_LUFS = -70.0
@@ -26,10 +28,6 @@ SHELF_GAIN_DB = 3.999843853973347
 SHELF_Q = 0.7071752369554196
 HIGHPASS_F0_HZ = 38.13547087602444
 HIGHPASS_Q = 0.5003270373238773
-
-
-class Unmeasurable(ValueError):
-    pass
 
 
 @dataclass(frozen=True)
