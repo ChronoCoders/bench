@@ -400,12 +400,12 @@ def test_a_file_below_its_range_is_raised(tmp_path):
 def test_render_does_only_what_the_plan_says(tmp_path):
     audio = decode(source(tmp_path))
     rig.control(float(np.max(np.abs(master.render(audio, {"steps": [
-                    {"correction": "gain", "db": -6.0}]})))),
+                    {"correction": "gain", "db": -6.0}]})[0]))),
                 float(np.max(np.abs(audio.samples))) * 10.0 ** (-6.0 / 20.0), 1e-12,
                 "a plan with one gain step and nothing else")
-    assert np.array_equal(master.render(audio, {"steps": []}), audio.samples), (
-        "a plan with no steps changed the audio"
-    )
+    samples, took = master.render(audio, {"steps": []})
+    assert np.array_equal(samples, audio.samples), "a plan with no steps changed the audio"
+    assert took == {}, "a plan with no limiter reported limiting"
 
 
 # The limiter is chosen by a criterion that can fail, or it is not chosen.
@@ -606,6 +606,25 @@ def test_it_says_what_the_limiter_took(mastered):
     assert squash is not None, "this file was supposed to need the limiter"
     assert squash["gain_reduction"]["largest_db"] >= 0.0
     assert 0.0 <= squash["gain_reduction"]["share_over_the_ceiling"] <= 1.0
+
+
+def test_what_it_took_was_measured_on_the_way_to_disk(mastered):
+    """The search measures a candidate and never measures a trim. Only the render does,
+    and the render is what decides the file, so the figures reported have to be the ones
+    it produced rather than the ones a candidate predicted."""
+    took = master.step(mastered["plan"], "limiter")["gain_reduction"]
+    assert "constant_trim_db" in took, (
+        "the reduction reported is the one the search predicted, not the one measured "
+        "on the signal that was written"
+    )
+
+
+def test_no_candidate_in_the_search_carries_a_trim(mastered):
+    """The control. If the search reported a trim as well, the key above would not tell
+    a measured figure from a predicted one and the test would pass either way."""
+    carried = [one for one in mastered["limiter_search"]["tried"]
+               if "constant_trim_db" in one["gain_reduction"]]
+    assert not carried, f"{len(carried)} candidates reported a trim nothing measured"
 
 # What the master says about itself. Three fields nothing here can know are typed once
 # per run and remembered; the rest are the file's own name, the year it was made, and a

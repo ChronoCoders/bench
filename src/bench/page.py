@@ -523,6 +523,9 @@ def _plan_items(plan: dict) -> str:
                     f"{one['release_ms']} ms. {sentence(one['chosen_from'])}. Took at most "
                     f"{worked['largest_db']} dB off, and moved the widest band by "
                     f"{one['largest_band_move_pct']} points.")
+            if worked.get("constant_trim_db"):
+                said += (" The envelope missed the ceiling and a constant "
+                         f"{worked['constant_trim_db']} dB was taken after it.")
             if one.get("at_search_edge"):
                 said += f" {sentence(one['at_search_edge'])}."
             if "why_it_stopped" in one:

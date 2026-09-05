@@ -135,13 +135,20 @@ def apply(samples: np.ndarray, rate: int, ceiling_dbtp: float,
     return out * (10.0 ** (trim / 20.0)), worked(gain, needed, trim)
 
 
-def worked(gain: np.ndarray, needed: np.ndarray, trim_db: float = 0.0) -> dict:
+def worked(gain: np.ndarray, needed: np.ndarray, trim_db: float | None = None) -> dict:
     """How much it took off, and how much of the file was over the ceiling to begin
     with. The second is read off the required gain rather than off the envelope: a
     release that recovers exponentially never returns to exactly one, so counting the
-    envelope would report every sample after the first reduction as reduced."""
-    return {
+    envelope would report every sample after the first reduction as reduced.
+
+    The trim is absent unless one was measured. A search over settings never measures
+    it, and a default zero sitting where a measurement belongs reads as a file that was
+    checked and found to need nothing.
+    """
+    out = {
         "largest_db": round(float(-20.0 * np.log10(max(gain.min(), 1e-12))), 3),
         "share_over_the_ceiling": round(float((needed < 1.0).mean()), 6),
-        "constant_trim_db": round(float(trim_db), 3),
     }
+    if trim_db is not None:
+        out["constant_trim_db"] = round(float(trim_db), 3)
+    return out

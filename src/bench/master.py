@@ -503,8 +503,14 @@ def step(built: dict, correction: str) -> dict | None:
     return None
 
 
-def render(audio: Audio, built: dict) -> np.ndarray:
-    """Exactly what the plan says, and nothing the plan does not say."""
+def render(audio: Audio, built: dict) -> tuple[np.ndarray, dict]:
+    """Exactly what the plan says, and what the limiter took doing it.
+
+    The second value is the only place the constant trim is ever measured. limiter.apply
+    checks the true peak of what it is about to return, and a trim that is not zero is
+    the envelope reporting that it missed the ceiling. Throwing that away left the claim
+    that it has never missed resting on the tests rather than on any file written here.
+    """
     samples = audio.samples
     if step(built, "low cut"):
         samples = low_cut(samples, audio.sample_rate_hz)
@@ -512,10 +518,11 @@ def render(audio: Audio, built: dict) -> np.ndarray:
     if gain:
         samples = samples * (10.0 ** (gain["db"] / 20.0))
     squash = step(built, "limiter")
-    if squash:
-        samples, _ = limiter.apply(samples, audio.sample_rate_hz, squash["ceiling_dbtp"],
-                                   squash["attack_ms"], squash["release_ms"])
-    return samples
+    if not squash:
+        return samples, {}
+    samples, took = limiter.apply(samples, audio.sample_rate_hz, squash["ceiling_dbtp"],
+                                  squash["attack_ms"], squash["release_ms"])
+    return samples, took
 
 
 def run(path: str | Path, target: dict, out_dir: str | Path,
@@ -552,7 +559,11 @@ def run(path: str | Path, target: dict, out_dir: str | Path,
     built = plan(before, target, filtered, limiting)
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    made = render(audio, built)
+    made, took = render(audio, built)
+    # What the search measured on a candidate is a prediction. This is the same signal
+    # measured on the way to disk, and it is the only one carrying a trim.
+    if took:
+        step(built, "limiter")["gain_reduction"] = took
     wanted = tags_for(source, said)
     write_master(destination, made, audio.sample_rate_hz, wanted)
 

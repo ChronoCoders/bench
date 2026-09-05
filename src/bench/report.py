@@ -173,6 +173,9 @@ def _applied(plan: dict) -> list[str]:
             out.append(f"    Took at most {worked['largest_db']} dB off. "
                        f"{worked['share_over_the_ceiling'] * 100:.2f} percent of the file "
                        "was over the ceiling before it ran.")
+            if worked.get("constant_trim_db"):
+                out.append("    The envelope missed the ceiling and a constant "
+                           f"{worked['constant_trim_db']} dB was taken after it.")
             out.append(f"    Moved the widest band by {one['largest_band_move_pct']} points, "
                        + ("more" if one["balance_moved_more_than_measurement_resolution"]
                           else "less") + " than this measurement can resolve.")
