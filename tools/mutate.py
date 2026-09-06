@@ -22,6 +22,9 @@ ROOT = Path(__file__).resolve().parent.parent
 PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
 COPIED = ("src", "tests", "tools", "targets", "fonts", "pyproject.toml")
 STAGE_PREFIX = "bench-mutate-"
+# Written by any run that saw every control, and read by the registry checks so they
+# do not need the whole suite again. It describes the tree it was taken on.
+REACHED = Path("tests/.reached.json")
 
 LIKELY_CATCHER = {
     "decode.py": "tests/test_decode.py",
@@ -39,6 +42,9 @@ LIKELY_CATCHER = {
     "typeface.py": "tests/test_typeface.py",
     "master.py": "tests/test_master.py",
     "toolchain.py": "tests/test_toolchain.py",
+    # Affordable only because a complete run leaves its reachability in a record. Without
+    # that this has to be the whole suite, which was half an hour of every sweep.
+    "methods.py": "tests/test_methods.py",
     "limiter.py": "tests/test_limiter.py",
     "serve.py": "tests/test_serve.py",
 }
@@ -835,6 +841,7 @@ def main() -> int:
             return 2
         print(f"baseline: {summary}")
         print()
+        reached = (work / REACHED).read_bytes() if (work / REACHED).exists() else None
 
         if wanted != MUTANTS:
             print(f"{len(wanted)} of {len(MUTANTS)} mutations selected by name")
@@ -856,6 +863,12 @@ def main() -> int:
                 caught, _ = run_suite(work, stop_early=True)
                 elsewhere = bool(caught)
             target.write_text(original, encoding="utf-8")
+            # A mutant that falls back to the whole suite writes a reachability record
+            # for a tree that stops existing the moment the mutation is undone. Left
+            # there it is discarded by the next reader, who then pays for a whole suite
+            # of their own. The record is put back with the source it describes.
+            if reached is not None:
+                (work / REACHED).write_bytes(reached)
 
             print(f"{m.name}  ({m.why})")
             if not caught:
