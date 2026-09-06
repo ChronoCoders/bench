@@ -38,6 +38,7 @@ LIKELY_CATCHER = {
     "page.py": "tests/test_page.py",
     "typeface.py": "tests/test_typeface.py",
     "master.py": "tests/test_master.py",
+    "toolchain.py": "tests/test_toolchain.py",
     "limiter.py": "tests/test_limiter.py",
     "serve.py": "tests/test_serve.py",
 }
@@ -56,6 +57,7 @@ PAGE = Path("src/bench/page.py")
 MASTER = Path("src/bench/master.py")
 SERVE = Path("tools/serve.py")
 METHODS = Path("src/bench/methods.py")
+TOOLCHAIN = Path("src/bench/toolchain.py")
 LIMITER = Path("src/bench/limiter.py")
 
 READ_BODY = '''    data, rate = sf.read(str(path), dtype="float64", always_2d=True)
@@ -667,6 +669,67 @@ MUTANTS = (
         """        sheet = remember(path, target_name,
                          lambda: folder.against(folder.measure(path), chosen))
         return page.document(path.name or "Folder", head + page.folder_view(sheet))""",
+    ),
+    Mutant(
+        "publish with a call that overwrites",
+        "os.replace takes a name that is already occupied, and refusing that name is "
+        "the whole guarantee",
+        MASTER,
+        "        os.link(temp, destination)",
+        "        os.replace(temp, destination)",
+    ),
+    Mutant(
+        "leave the temporary file where it fell",
+        "a write that did not finish then sits in the output folder for the next run "
+        "to find",
+        MASTER,
+        """    finally:
+        temp.unlink(missing_ok=True)""",
+        """    finally:
+        pass""",
+    ),
+    Mutant(
+        "take a target's word for it that a bound is a number",
+        "a bound that is not a number reaches the comparison and comes back as a verdict",
+        COMPARE,
+        """            got = {key: _bound_number(name, field, key, bound[key])
+                   for key in ("low", "high", "max") if key in bound}""",
+        """            got = {key: bound[key]
+                   for key in ("low", "high", "max") if key in bound}""",
+    ),
+    Mutant(
+        "let json read a bare NaN",
+        "json accepts NaN by default, and a bound made of one compares false against "
+        "every measurement, which arrives as a verdict",
+        COMPARE,
+        '    target = json.loads(Path(path).read_text(encoding="utf-8"),\n'
+        "                        parse_constant=_refuse_constant(name))",
+        '    target = json.loads(Path(path).read_text(encoding="utf-8"))',
+    ),
+    Mutant(
+        "read a range with its ends the wrong way round",
+        "no measurement can be inside it, so every file fails and nothing says why",
+        COMPARE,
+        '            if "low" in got and "high" in got and got["low"] > got["high"]:',
+        "            if False:",
+    ),
+    Mutant(
+        "let a toolchain difference decide a verdict",
+        "it is a reason to look at a number, not a reason to withhold one, and a bench "
+        "that fails a record on an ffmpeg upgrade is reporting the upgrade",
+        COMPARE,
+        '        "all_inside": all(r["verdict"] in VERDICTS_THAT_PASS for r in judged(rows)),',
+        '        "all_inside": all(r["verdict"] in VERDICTS_THAT_PASS for r in judged(rows))\n'
+        "        and not toolchain.differences(\n"
+        '            measurement.get("toolchain"), target.get("evidence", {}).get("toolchain")),',
+    ),
+    Mutant(
+        "read a part only one side names as a disagreement",
+        "every target written before provenance existed says nothing, and silence is "
+        "not disagreement",
+        TOOLCHAIN,
+        "        if mine is not None and theirs is not None and mine != theirs:",
+        "        if mine != theirs:",
     ),
     Mutant(
         "mark a control as running none of the method it stands behind",

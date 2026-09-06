@@ -537,6 +537,13 @@ _METHODS = (
             "carrying a residual over from other tracks. Entry 32.",
             "It can write a file that is worse. Nothing here judges the result by ear, and "
             "the verdicts it reports are against a target seeded from three lossy references.",
+            "The refusal to overwrite is checked at the start of a run and the file is written "
+            "at the end of it, a decode, a search and a render apart. libsndfile creates the "
+            "file the moment its header is written, so writing straight to the destination "
+            "left a stub on disk from the first instant, and a run that died anywhere after "
+            "that left a name the next run refuses in the words it uses for a finished "
+            "master. It is written under a temporary name and linked onto the destination, "
+            "because os.link refuses a name that is taken and os.replace does not.",
         ),
         cross_check="It measures what it wrote, from the file on disk and with both "
         "instruments, and checks the output against what the plan predicted using the "
@@ -607,6 +614,9 @@ _METHODS = (
             "test_what_it_reports_about_its_own_work",
             "test_the_envelope_meets_the_ceiling_without_the_trim",
             "test_the_ceiling_check_can_fail",
+            "test_a_master_is_published_under_the_name_it_was_given",
+            "test_a_write_that_failed_leaves_nothing_behind",
+            "test_a_name_that_arrived_during_the_run_is_refused_at_publish",
             "test_the_master_carries_what_it_was_told",
             "test_the_year_is_not_read_off_the_clock",
             "test_a_field_left_blank_is_left_out",
