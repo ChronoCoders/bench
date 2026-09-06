@@ -3,4 +3,5 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .bench-cache/
+.reached.json
 *.egg-info/

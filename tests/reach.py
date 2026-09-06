@@ -17,15 +17,25 @@ from one that ignored it.
 
 sys.setprofile fires on call and return, not per line. Measured over 43 tests it cost
 16.200 s against 16.212 s without, which is inside the run to run spread of the machine.
+
+A complete run leaves what it saw in a record beside these tests, so the check can be
+made again without running everything again. That is what makes a mutation of the
+registry affordable: mutate.py has to run the whole suite for any break it cannot aim a
+single test file at, and three registry mutants at a whole suite each were half an hour
+of every sweep.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sys
 import threading
 from pathlib import Path
 
-SRC = str((Path(__file__).resolve().parent.parent / "src" / "bench").resolve())
+ROOT = Path(__file__).resolve().parent.parent
+SRC = str((ROOT / "src" / "bench").resolve())
+RECORD = Path(__file__).resolve().parent / ".reached.json"
 
 BY_TEST: dict[str, set[str]] = {}
 _by_fixture: dict[str, set[str]] = {}
@@ -66,3 +76,62 @@ def credit_test(name: str, files: set[str], fixtures) -> None:
     for one in fixtures:
         files |= _by_fixture.get(one, set())
     BY_TEST.setdefault(name, set()).update(files)
+
+
+def fingerprint() -> str:
+    """What the record describes: every source file, every test and every tool, because
+    all of them decide which files a test runs code in.
+
+    `methods.py` is the single exclusion and it is the whole point. The registry is data
+    that nothing running reads, so changing it cannot move one touch, which is what lets
+    a record taken before a registry mutation still describe the tree after it. A test
+    holds that claim, because the day something under src imports the registry this
+    exclusion becomes a way for a stale record to answer for a tree it does not
+    describe.
+    """
+    parts = []
+    for folder, pattern in ((ROOT / "src", "**/*.py"), (ROOT / "tests", "**/*.py"),
+                            (ROOT / "tools", "*.py")):
+        for one in sorted(folder.glob(pattern)):
+            if one.name == "methods.py":
+                continue
+            parts.append(f"{one.relative_to(ROOT).as_posix()}:"
+                         f"{hashlib.sha256(one.read_bytes()).hexdigest()}")
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+def recorded() -> dict[str, set[str]]:
+    """What a previous complete run saw, if it saw the tree that is here now."""
+    try:
+        held = json.loads(RECORD.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if held.get("fingerprint") != fingerprint():
+        return {}
+    return {name: set(files) for name, files in held.get("touched", {}).items()}
+
+
+def available() -> dict[str, set[str]]:
+    """This session's touches, and a matching record for the tests it did not run."""
+    got = {name: set(files) for name, files in BY_TEST.items()}
+    for name, files in recorded().items():
+        got.setdefault(name, set()).update(files)
+    return got
+
+
+def save_if_complete(wanted: set[str]) -> bool:
+    """Only a run that saw everything writes the record.
+
+    A partial run is a true observation and still the wrong thing to keep, because
+    writing it would replace a complete record with a smaller one and leave the next
+    reader with a gap it cannot tell from a test that touches nothing. It matters most
+    under mutation, where every run but the baseline is a single test file: one of those
+    overwriting the baseline's record would put the whole suite back into the sweep.
+    """
+    if not wanted or not wanted <= set(BY_TEST):
+        return False
+    RECORD.write_text(json.dumps(
+        {"fingerprint": fingerprint(),
+         "touched": {name: sorted(files) for name, files in sorted(BY_TEST.items())}},
+        indent=1), encoding="utf-8")
+    return True

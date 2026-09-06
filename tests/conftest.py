@@ -33,6 +33,13 @@ def pytest_runtest_call(item):
                           reach.stop(), getattr(item, "fixturenames", ()))
 
 
+def pytest_sessionfinish(session, exitstatus):
+    """Keep what a complete run saw. The registry says what complete means, and nothing
+    else here needs to know."""
+    from bench import methods
+    reach.save_if_complete({c for m in methods.METHODS.values() for c in m.controls})
+
+
 def pytest_collection_modifyitems(items):
     """The reachability check reads what the session ran, so it runs after the session.
     Collection order is alphabetical and test_methods.py sits in the middle of it, where

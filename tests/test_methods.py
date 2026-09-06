@@ -11,6 +11,7 @@ from bench import methods
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "bench"
 TESTS = ROOT / "tests"
+TOOLS = ROOT / "tools"
 
 METHOD_CONST = re.compile(r'^([A-Z][A-Z0-9_]*)\s*=\s*"([^"]+)"', re.M)
 TEST_DEF = re.compile(r"^def (test_\w+)", re.M)
@@ -85,11 +86,11 @@ def test_every_control_reaches_the_method_it_stands_behind():
     work reads as reached, because the fixture ran and this cannot tell a test that read
     its result from one that ignored it. An empty test with no fixtures is caught.
     """
-    ran = reach.BY_TEST
+    ran = reach.available()
     absent = sorted(named_controls() - set(ran))
     if absent:
-        pytest.skip(f"{len(absent)} controls did not run in this session, "
-                    f"starting with {absent[0]}. This holds over a whole run.")
+        pytest.skip(f"{len(absent)} controls did not run in this session and are in no "
+                    f"record of this tree, starting with {absent[0]}.")
     wrong = []
     for m in methods.METHODS.values():
         for c in m.controls:
@@ -101,6 +102,31 @@ def test_every_control_reaches_the_method_it_stands_behind():
                 wrong.append(f"{c} stands behind {m.id} and ran none of {list(m.files)}. "
                              f"It ran {sorted(ran[c]) or 'nothing'}")
     assert not wrong, "\n" + "\n".join(wrong)
+
+
+def _imports_the_registry(path: Path) -> bool:
+    text = path.read_text(encoding="utf-8")
+    return bool(re.search(r"^from bench import [^\n]*\bmethods\b", text, re.M)
+                or re.search(r"^from bench\.methods import\b", text, re.M)
+                or re.search(r"^import bench\.methods\b", text, re.M))
+
+
+def test_the_registry_is_read_by_nothing_that_runs():
+    """What lets a reachability record survive a change to methods.py.
+
+    The record says which files each test ran code in. It stays true across an edit to
+    the registry only while the registry is data that no measurement path reads, and
+    that is what makes checking a registry mutation cost one test file rather than the
+    whole suite. The day something under src imports it, this stops being true and the
+    saving has to be given back rather than quietly kept.
+    """
+    assert _imports_the_registry(TESTS / "test_methods.py"), (
+        "the scan cannot find an import that is there, so its silence over src and "
+        "tools means nothing"
+    )
+    readers = sorted(one.name for one in list(SRC.rglob("*.py")) + list(TOOLS.glob("*.py"))
+                     if _imports_the_registry(one))
+    assert not readers, f"the registry is imported by {readers}, so a record cannot outlive an edit to it"
 
 
 def test_every_method_names_at_least_one_failure_mode_and_a_cross_check():
