@@ -1272,6 +1272,61 @@ a target that says nothing at all, are silence rather than disagreement. Every t
 written before this existed says nothing, and reporting that as a difference would put a
 note on every comparison in the repository and teach the reader to ignore it.
 
+### 46. A mutation fallback polluting a cache derived from a tree that no longer exists
+
+Three mutants aimed at `methods.py` cost a whole suite each, because the reachability
+check reads what every test touched and skips unless everything ran. That is about half
+an hour of every sweep. The fix was to have a complete run leave what it saw in
+`tests/.reached.json`, fingerprinted over every file that decides which files a test runs
+code in, so the check can be made again without running everything again.
+
+It worked in isolation and leaked in the sweep. `mutate.py` falls back to the whole suite
+whenever a mutant's likely catcher does not fire, and a whole suite run writes the record.
+So a `master.py` mutant fell back, wrote a record describing a tree whose `master.py` was
+mutated, and mutate.py then undid that mutation. The fingerprint stopped matching, the
+record was correctly discarded, and the next registry mutant found nothing to read and
+paid for a whole suite. One third of the saving was not real.
+
+Nothing here was wrong on its own. The fingerprint did its job. The fallback did its job.
+The record was written by a run that genuinely saw every control. What was missing is that
+a mutant run is not a run of this tree, so anything it derives describes a tree that stops
+existing the moment the mutation is undone.
+
+**The invariant: each mutant leaves both the source and any tree-derived cache exactly as
+the baseline left them.** `mutate.py` already restored the source file after every mutant
+and that was the whole model, one file changed and put back. A cache derived from the tree
+is the same kind of state and was not covered. The record is now snapshotted after the
+baseline and restored after each mutant, beside the source it already restored.
+
+This is entry 41 again from the other end. There the fault was holding a verdict that
+outlived the target that produced it. Here it is holding a reachability record that
+outlived the tree that produced it. Both are a cache keyed on something that had changed
+underneath it, and in both the wrongness was invisible from inside the thing doing the
+caching.
+
+What caught it was reading the sweep log rather than the total. The run came back "all 86
+mutations caught" in 1:24:02 against 2:39:46, which is what I was about to report. Three
+lines inside it said `(outside its own test file)`, one of them on a registry mutant, which
+is the tool saying plainly that the hint missed and it had paid full price anyway. **A
+total that improved is not evidence that the thing you changed is what improved it.**
+
+The performance claim in two layers, because only one of them is measured.
+
+Measured, in two targeted runs: the three registry mutants together take about twenty
+seconds, against a whole suite each before. 11:15 wall against a 10:56 baseline in the
+first, 11:48 against 8:52 in the second, which also carried an unrelated fallback.
+
+Predicted, not measured: roughly one suite cheaper on a full sweep. The two full sweeps
+either side of this work are 2:39:46 and 1:24:02, but their baselines differ by 65 seconds
+on an identical suite, and the second still contained the leak, so neither total is the
+fixed configuration's number and no third sweep was run to get one.
+
+One thing worth keeping from working out why these three were expensive. `-x` stops at the
+first failing test, so a fallback is usually cheap: the `master.py` mutant fails eight
+files in and stops. The registry check is deliberately ordered last, because it reads what
+the session ran, so `-x` had to get through the entire suite before it could fail. It was
+not the suite that cost, it was a check that can only fail at the end.
+
 ### The quoted figure that the measurement contradicted
 
 The boom bap profile was asked for on a stated premise: that the style carries a
