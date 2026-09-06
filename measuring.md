@@ -1172,6 +1172,106 @@ Removing the two borrowed controls from the ffmpeg method left its published val
 with no reject control of its own, so one was written rather than left to the entry that
 would still have read as controlled.
 
+### 43. A guarantee checked at one end of a run and kept at the other
+
+The README says an existing master is never replaced. `refuse_unsafe` reads
+`destination.exists()` and raises if it does, and that check is the first thing a run
+does. The write is the last. Between them sit a decode, both instruments, the plan, a
+limiter search over twelve settings and a render, which on a real track is minutes.
+
+The corruption half needs no second process at all. `sf.SoundFile(path, "w")` creates
+and truncates immediately, measured at 44 bytes on disk before a single sample is
+written:
+
+    exists after open, before any samples:  True  44 bytes
+    exists mid write:                       True  6044 bytes
+
+So from the instant the header lands there is a file under the master's name. A run that
+died anywhere after that left a stub, and the next run read it, found it, and refused,
+in the exact words it uses for a finished master: "already exists. Nothing here
+overwrites, so the previous master has to be moved or removed first." A 44 byte fragment
+was protected as a record.
+
+The fix is not an atomic replace. `os.replace` succeeds onto a name that is already
+taken, which is the guarantee being given away to get atomicity. The file is written
+under a temporary name in the same folder and published with `os.link`, which fails when
+the name exists, and that failure is the guarantee. A filesystem that cannot link is one
+this cannot publish onto safely, so it refuses rather than falling back to something
+that would overwrite.
+
+**A check is only a guarantee at the moment it is made.** The early check stays, because
+refusing before a five minute render is kinder than refusing after it, but it is an
+early exit now rather than the promise. The promise lives at the publish.
+
+Two things this cost that are worth recording. The temporary name deliberately has no
+audio extension, so a folder read during a run cannot mistake it for a master, and that
+broke the write immediately: libsndfile infers its format from the extension and raised
+`No format specified and unable to get format from file extension` on every master in the
+suite. The format is named explicitly now. It was caught by the control written for these
+three tests, the one asserting the ordinary path still produces a file, which existed
+only because the other two assert that a file is absent and absence proves nothing on its
+own.
+
+### 44. A validator that counted keys and never read values
+
+`compare.load` checked that a bound had `max`, or both `low` and `high`, and that a limit
+said who declared it. It never looked at what those keys held. Three shapes got through:
+
+    low -5.0, high -12.0   ->  'above'        nothing can ever read inside
+    max NaN                ->  'on the line'  deviation 0.0
+    max "loud"             ->  TypeError at comparison time
+
+The NaN is the one that matters. Every comparison against NaN is false, so `verdict`
+falls past all four branches and returns its last line, which is `on the line`, and
+`deviation` returns 0.0. Those are this bench's words for a file sitting exactly on its
+limit with the uncertainty counted, which is a measured statement about a real boundary.
+Produced here by a boundary that does not exist. A tool whose entire purpose is refusing
+to guess was manufacturing the most precise verdict it has.
+
+The inverted range is quieter and no better. It never raises and never reads inside, so
+a whole folder comes back failing with nothing anywhere saying the target is impossible.
+
+Refused at load now, by name and by field, and the JSON parser refuses a bare `NaN`
+before the bound checks ever run. `json.loads` accepts `NaN` and `Infinity` by default
+and `json.dumps` writes them, so one survives a round trip through a file, and a NaN can
+arrive in any field rather than only in a bound.
+
+`tools/master_folder.py` read its target with `json.loads` and never called `compare.load`
+at all. That is the tool that masters a whole folder. **A validator a second entry point
+walks around is not a validator**, and this one had been walked around since it was
+written.
+
+### 45. The same method id, two different answers
+
+Every number here carries the id of the method that produced it, and the registry says
+what that method does and how it would lie. What no number carried was the version of the
+thing that actually ran.
+
+`loudness/ffmpeg-ebur128` is an ffmpeg run. `loudness/bs1770-4-numpy` is scipy filters.
+Entry 13 of this file is the record of a 129 tap oversampling filter and a 257 tap one
+reading the same analytic control identically and parting company by 0.029 dB on a real
+master, which is enough to flip a -1 dBTP ceiling. A scipy release that changes `upfirdn`
+moves that number the same way, and the method id does not move at all. A target seeded
+on one machine and compared against on another is a comparison between two instruments
+wearing one name.
+
+So `toolchain.here()` records ffmpeg, libsndfile, scipy and numpy as four fields rather
+than one string, a measurement carries it, a seeded target carries it in its evidence,
+and `compare.against` reports which parts differ.
+
+It reports and does nothing else. A different ffmpeg is a reason to look at a figure, not
+a reason to withhold it, and a bench that failed a record because a dependency was
+upgraded would be reporting the upgrade. The note goes beside the numbers on the page and
+in the text report, and `all_inside` is untouched. That decision is held by a test that
+compares two identical comparisons, one with a differing toolchain, and requires every
+row, every count and the verdict to match, and by a mutant that makes the difference
+decide `all_inside`.
+
+The other half is what does not count as a difference. A part named on one side only, and
+a target that says nothing at all, are silence rather than disagreement. Every target
+written before this existed says nothing, and reporting that as a difference would put a
+note on every comparison in the repository and teach the reader to ignore it.
+
 ### The quoted figure that the measurement contradicted
 
 The boom bap profile was asked for on a stated premise: that the style carries a
