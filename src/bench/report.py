@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bench import compare, fields
+from bench import compare, fields, toolchain
 
 BLANK = ""
 GAP = 2
@@ -82,6 +82,8 @@ def comparison_table(result: dict) -> str:
     if evidence.get("all_sources_lossy"):
         out.append("Every reference is lossy. Fields that a lossy source cannot support are "
                    "listed at the bottom without a bound.")
+    if result.get("toolchain_differs"):
+        out.append(toolchain.sentence(result["toolchain_differs"]))
     out.append("")
 
     placed = [r for r in result["rows"]

@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from bench import compare, measurement
+from bench import compare, measurement, toolchain
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "targets"
@@ -208,6 +208,9 @@ def build(profile: Profile) -> bool:
         "all_sources_lossy": True,
         "sources": sources,
         "note": profile.note,
+        # What measured the references. A target is a set of numbers, and the tools that
+        # produced them are part of what those numbers mean.
+        "toolchain": toolchain.here(),
     }
     if profile.observed:
         evidence["observed"] = list(profile.observed)

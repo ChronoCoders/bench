@@ -8,7 +8,7 @@ from __future__ import annotations
 from html import escape
 from pathlib import Path
 
-from bench import compare, fields, measurement, typeface
+from bench import compare, fields, measurement, toolchain, typeface
 
 DESIGN = (Path(__file__).resolve().parent / "design.css").read_text(encoding="utf-8")
 
@@ -413,7 +413,10 @@ def comparison_view(result: dict) -> str:
         f"<div class=\"inset\"><p>Built from {evidence['n']} reference"
         + ("s" if evidence["n"] != 1 else "") +
         (", all lossy." if evidence.get("all_sources_lossy") else ".") +
-        f" {escape(verdict)}</p></div>"
+        f" {escape(verdict)}</p>"
+        + (f"<p class=\"note\">{escape(toolchain.sentence(result['toolchain_differs']))}</p>"
+           if result.get("toolchain_differs") else "")
+        + "</div>"
         "<div class=\"wrap\"><table class=\"rows\"><thead><tr><th>Field</th><th>Value</th>"
         "<th>Plus minus</th><th>Target</th><th>Deviation</th><th>Verdict</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>"

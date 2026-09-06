@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from bench import toolchain
 from bench.decode import Audio, decode
 from bench.measure import Unmeasurable, levels, loudness, spectral, stereo, tempo
 
@@ -34,7 +35,10 @@ def _expand_spectral(block: dict) -> dict:
 
 
 def of_audio(audio: Audio) -> dict:
-    out = {"source": audio.source_dict(), "duration_s": round(audio.duration_s, 3)}
+    # What produced these numbers, beside the numbers. Same method id, different
+    # ffmpeg or scipy, different answer, and until this nothing recorded which.
+    out = {"source": audio.source_dict(), "duration_s": round(audio.duration_s, 3),
+           "toolchain": toolchain.here()}
     for name, module in MODULES:
         try:
             block = module.measure(audio)
