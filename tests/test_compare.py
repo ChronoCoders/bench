@@ -214,6 +214,72 @@ def test_a_limit_that_does_not_say_who_declared_it_is_refused(tmp_path):
         compare.load(write_target(tmp_path, body))
 
 
+# A bound that is not a number reaches verdict() and comes back as a verdict rather
+# than as an error, which is the one thing this layer exists to not do.
+
+def test_a_bound_with_low_above_high_is_refused(tmp_path):
+    """No measurement can sit inside it, so every file reads as failing and nothing on
+    the page says the target is the reason."""
+    body = {"name": "t", "band_set": "bench-v1", "evidence": {"n": 1},
+            "fields": {"loudness.integrated_lufs": {"low": -5.0, "high": -12.0}}}
+    with pytest.raises(compare.TargetError, match="low -5.0 above high -12.0"):
+        compare.load(write_target(tmp_path, body))
+
+
+def test_that_range_would_otherwise_have_produced_a_verdict(tmp_path):
+    """The control. If an inverted range refused on its own at comparison time, the
+    check above would be guarding nothing."""
+    got = compare.verdict(-9.0, 0.1, {"low": -5.0, "high": -12.0})
+    assert got in (compare.ABOVE, compare.BELOW, compare.ON_THE_LINE), (
+        f"an impossible range came back as {got!r}, which reads as a measurement"
+    )
+
+
+def test_a_bound_that_is_not_a_number_is_refused(tmp_path):
+    body = {"name": "t", "band_set": "bench-v1", "evidence": {"n": 1}, "fields": {},
+            "limits": {"loudness.true_peak_dbtp": {"max": "loud", "declared_by": "test"}}}
+    with pytest.raises(compare.TargetError, match="'loud'.*str rather than a number"):
+        compare.load(write_target(tmp_path, body))
+
+
+def test_a_bound_that_is_a_boolean_is_refused(tmp_path):
+    """True is an int in Python and would compare as 1.0, which is a real ceiling."""
+    body = {"name": "t", "band_set": "bench-v1", "evidence": {"n": 1}, "fields": {},
+            "limits": {"loudness.true_peak_dbtp": {"max": True, "declared_by": "test"}}}
+    with pytest.raises(compare.TargetError, match="bool rather than a number"):
+        compare.load(write_target(tmp_path, body))
+
+
+def test_a_target_carrying_a_bare_nan_fails_as_json(tmp_path):
+    """json accepts NaN and Infinity by default, and json.dumps writes them, so one
+    survives a round trip through a file. It is refused where the document is parsed
+    rather than left to the bound checks, because a NaN can arrive in any field."""
+    path = tmp_path / "t.json"
+    path.write_text('{"name": "t", "band_set": "bench-v1", "evidence": {"n": 1}, '
+                    '"fields": {"loudness.lra_lu": {"max": NaN}}}', encoding="utf-8")
+    with pytest.raises(compare.TargetError, match="NaN, which is not a number"):
+        compare.load(path)
+
+
+def test_a_nan_bound_would_otherwise_have_produced_a_verdict():
+    """The control on the one above, and the reason it is worth refusing. Every
+    comparison against NaN is false, so verdict falls through to its last line."""
+    assert compare.verdict(-1.5, 0.05, {"max": float("nan")}) == compare.ON_THE_LINE, (
+        "a bound that does not exist has to be caught at load, because at comparison "
+        "time it reads as a file sitting exactly on its limit"
+    )
+    assert compare.deviation(-1.5, {"max": float("nan")}) == 0.0
+
+
+def test_the_error_names_the_target_and_the_field(tmp_path):
+    body = {"name": "t", "band_set": "bench-v1", "evidence": {"n": 1},
+            "fields": {"loudness.integrated_lufs": {"low": -5.0, "high": -12.0}}}
+    with pytest.raises(compare.TargetError) as why:
+        compare.load(write_target(tmp_path, body))
+    assert "t.json" in str(why.value), "the message does not say which target"
+    assert "loudness.integrated_lufs" in str(why.value), "the message does not say which field"
+
+
 def test_a_well_formed_target_loads(tmp_path):
     body = {"name": "t", "band_set": "bench-v1", "evidence": {"n": 2}, "fields": {},
             "limits": {"loudness.true_peak_dbtp": {"max": -1.0, "declared_by": "test"}}}

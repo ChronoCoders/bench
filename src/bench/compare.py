@@ -8,7 +8,10 @@ boundary.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
+
+from bench import toolchain
 
 INSIDE = "inside"
 ABOVE = "above"
@@ -28,20 +31,56 @@ class TargetError(ValueError):
     pass
 
 
+def _refuse_constant(name: str):
+    """json accepts bare NaN and Infinity by default. They are not JSON, and a bound
+    made of one compares false against every measurement, which arrives as a verdict
+    rather than as an error. Refused where the file is parsed, so a malformed target
+    fails as a document rather than resting on the bound checks below to catch it."""
+    def refuse(token: str):
+        raise TargetError(
+            f"target {name} contains {token}, which is not a number JSON can carry"
+        )
+    return refuse
+
+
+def _bound_number(name: str, field: str, key: str, value) -> float:
+    """A bound has to be a number, and a bool is not one. True would compare as 1.0."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TargetError(
+            f"target {name}: {field} gives {value!r} for {key!r}, which is a "
+            f"{type(value).__name__} rather than a number"
+        )
+    if not math.isfinite(value):
+        raise TargetError(
+            f"target {name}: {field} gives {value!r} for {key!r}, which is not a bound"
+        )
+    return float(value)
+
+
 def load(path: str | Path) -> dict:
-    target = json.loads(Path(path).read_text(encoding="utf-8"))
+    name = Path(path).name
+    target = json.loads(Path(path).read_text(encoding="utf-8"),
+                        parse_constant=_refuse_constant(name))
     for required in ("name", "band_set", "evidence", "fields"):
         if required not in target:
-            raise TargetError(f"target {Path(path).name} has no {required!r}")
+            raise TargetError(f"target {name} has no {required!r}")
     if "n" not in target["evidence"]:
-        raise TargetError(f"target {Path(path).name} does not say how many references it rests on")
+        raise TargetError(f"target {name} does not say how many references it rests on")
     for section in ("fields", "limits"):
         for field, bound in target.get(section, {}).items():
             if "max" not in bound and not ("low" in bound and "high" in bound):
-                raise TargetError(f"{field} must give either max, or both low and high")
+                raise TargetError(
+                    f"target {name}: {field} must give either max, or both low and high")
+            got = {key: _bound_number(name, field, key, bound[key])
+                   for key in ("low", "high", "max") if key in bound}
+            if "low" in got and "high" in got and got["low"] > got["high"]:
+                raise TargetError(
+                    f"target {name}: {field} gives low {got['low']} above high "
+                    f"{got['high']}, and no measurement can be inside that"
+                )
     for field, bound in target.get("limits", {}).items():
         if not bound.get("declared_by"):
-            raise TargetError(f"limit {field} must say who declared it")
+            raise TargetError(f"target {name}: limit {field} must say who declared it")
     return target
 
 
@@ -143,6 +182,11 @@ def against(measurement: dict, target: dict) -> dict:
         "counts": counts,
         "advisory": sum(1 for r in rows if r.get("advisory")),
         "all_inside": all(r["verdict"] in VERDICTS_THAT_PASS for r in judged(rows)),
+        # Reported, never acted on. A different ffmpeg is a reason to look at a figure,
+        # not a reason to refuse it, and a comparison refused on provenance would be a
+        # tool that stops working every time something is upgraded.
+        "toolchain_differs": toolchain.differences(
+            measurement.get("toolchain"), target.get("evidence", {}).get("toolchain")),
     }
 
 

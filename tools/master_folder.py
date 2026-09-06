@@ -11,7 +11,6 @@ Run it: python tools/master_folder.py "path/to/folder" boom-bap "path/to/output"
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -68,7 +67,9 @@ def main() -> int:
         print(__doc__)
         return 2
     where, slug, out_dir = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
-    target = json.loads((TARGETS / f"{slug}.json").read_text(encoding="utf-8"))
+    # compare.load, not json.loads. A validator a second entry point walks around is
+    # not a validator, and this is the one that masters a whole folder.
+    target = compare.load(TARGETS / f"{slug}.json")
 
     done, failed = master.run_each(audio_in(where), target, out_dir)
     for one in done:
