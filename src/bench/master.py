@@ -12,6 +12,7 @@ It never writes over an input, and it measures what it wrote.
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -646,13 +647,58 @@ def tags_held(wanted: dict, got: dict) -> dict:
     return out
 
 
+def publish(temp: Path, destination: Path) -> None:
+    """Give the finished file its real name, or refuse.
+
+    os.link fails when the name is already taken, and that failure is the guarantee.
+    os.replace would succeed and overwrite, so it is not a fallback here: a filesystem
+    that cannot link is one this cannot publish onto without risking a file it did not
+    write, and saying so is the only answer that keeps the promise.
+    """
+    try:
+        os.link(temp, destination)
+    except FileExistsError:
+        raise Unsafe(
+            f"{destination} arrived while this run was working. Nothing here "
+            "overwrites, so the file that got there first is left alone."
+        ) from None
+    except OSError as why:
+        raise Unsafe(
+            f"{destination} cannot be published without risking what is already there: "
+            f"the filesystem refused a hard link ({why}). Nothing here falls back to a "
+            "write that would replace an existing file."
+        ) from None
+
+
 def write_master(destination, samples: np.ndarray, rate: int, tags: dict) -> None:
-    """The audio and what it says about itself, in one file."""
-    with sf.SoundFile(str(destination), "w", samplerate=rate,
-                      channels=int(np.atleast_2d(samples).shape[0]), subtype=SUBTYPE) as f:
-        for name, value in tags.items():
-            setattr(f, name, value)
-        f.write(np.atleast_2d(samples).T)
+    """The audio and what it says about itself, in one file, under a name that was free
+    a moment ago rather than one checked minutes ago.
+
+    Written under a temporary name in the same folder and then linked onto the
+    destination. The check at the start of a run and the write at the end of it are a
+    decode, a search and a render apart, and libsndfile creates the file the moment the
+    header is written, so writing straight to the destination left a stub on disk from
+    the first instant. A run that died anywhere after that left a name the next run
+    refuses to overwrite, in the words it uses for a finished master.
+    """
+    destination = Path(destination)
+    handle, made = tempfile.mkstemp(dir=destination.parent,
+                                    prefix=f".{destination.stem}-", suffix=".partial")
+    os.close(handle)
+    temp = Path(made)
+    try:
+        # The temporary name deliberately carries no audio extension, so a folder read
+        # while a run is working cannot mistake it for a master. That is also why the
+        # format is named here rather than left to be inferred from it.
+        with sf.SoundFile(str(temp), "w", samplerate=rate,
+                          channels=int(np.atleast_2d(samples).shape[0]), subtype=SUBTYPE,
+                          format=destination.suffix.lstrip(".").upper()) as f:
+            for name, value in tags.items():
+                setattr(f, name, value)
+            f.write(np.atleast_2d(samples).T)
+        publish(temp, destination)
+    finally:
+        temp.unlink(missing_ok=True)
 
 
 def waveform(samples: np.ndarray, columns: int = WAVEFORM_COLUMNS) -> list[float]:

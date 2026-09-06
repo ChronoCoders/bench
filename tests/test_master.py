@@ -190,6 +190,53 @@ def test_the_refusal_is_not_blanket(tmp_path):
     assert master.refuse_unsafe(path, tmp_path / "out") == (tmp_path / "out" / path.name).resolve()
 
 
+# The check and the write are minutes apart, and the file appears on disk the moment
+# its header is written. What the refusal protects has to be a finished file.
+
+def written(out):
+    """Everything in the output folder, including the temporary names, which is the
+    point: a run that fails must not leave one of those either."""
+    return sorted(one.name for one in Path(out).iterdir())
+
+
+def test_a_master_is_published_under_the_name_it_was_given(tmp_path):
+    """The control on the two below. Both of them assert that a file is absent, and
+    absence proves nothing until this shows the same call can produce one."""
+    out = tmp_path / "out"
+    out.mkdir()
+    master.write_master(out / "made.wav", np.zeros((2, 4800)), 48000, {"title": "made"})
+    assert written(out) == ["made.wav"], "the temporary name was left in the folder"
+
+
+def test_a_write_that_failed_leaves_nothing_behind(tmp_path):
+    """A rate libsndfile refuses, which it refuses after creating the file. That is the
+    interrupted run in miniature: the header lands, the write does not finish, and what
+    is left sits under the name the next run reads as a master it made before."""
+    out = tmp_path / "out"
+    out.mkdir()
+    with pytest.raises(Exception):
+        master.write_master(out / "made.wav", np.zeros((2, 4800)), 0, {"title": "made"})
+    assert written(out) == [], (
+        "a write that did not finish left a file behind, and the next run refuses to "
+        "overwrite it in the words it uses for a finished master"
+    )
+
+
+def test_a_name_that_arrived_during_the_run_is_refused_at_publish(tmp_path):
+    """The early check cannot see this one. It runs before the decode, the search and
+    the render, and the guarantee has to hold at the end of that rather than the start."""
+    out = tmp_path / "out"
+    out.mkdir()
+    theirs = out / "made.wav"
+    theirs.write_bytes(b"arrived while this run was working")
+    with pytest.raises(master.Unsafe):
+        master.write_master(theirs, np.zeros((2, 4800)), 48000, {"title": "made"})
+    assert theirs.read_bytes() == b"arrived while this run was working", (
+        "the file that was already there was overwritten"
+    )
+    assert written(out) == ["made.wav"], "the temporary name was left in the folder"
+
+
 def test_the_input_is_the_same_file_afterwards(tmp_path):
     path = source(tmp_path)
     before = sha1(path)
